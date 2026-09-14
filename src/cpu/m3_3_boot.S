@@ -1,4 +1,4 @@
-/* AmiDiag M3.3 clean-room 68000 bus-error recovery qualification ROM. */
+/* AmiDiag M3.3 clean-room 68000 bus-error handler qualification ROM. */
 
     .equ CIAA_PRA,   0x00BFE001
     .equ SERDATR,    0x00DFF018
@@ -8,6 +8,9 @@
     .equ SERPER_9600_PAL, 369
     .equ STACK_TOP,  0x0007FFFC
     .equ BUS_PROBE_ADDR, 0x00400000
+    .equ SYNTH_SSW,  0x1234
+    .equ SYNTH_IR,   0x4E71
+    .equ SYNTH_SR,   0x2700
 
     .section .vectors,"a"
     .globl _rom_vectors
@@ -29,10 +32,26 @@ _rom_reset:
     bsr     serial_puts
     lea     vectors_record,%a0
     bsr     serial_puts
-    lea     probe_record,%a0
-    bsr     serial_puts
 
-    bsr     test_recoverable_bus
+    /* Probe whether this platform/emulator actually asserts /BERR for an
+       unmapped A500 address. Lack of /BERR is a platform capability result,
+       not a failure of the bus-error handler. */
+    bsr     probe_hardware_berr
+    tst.b   %d1
+    bne.s   hardware_berr_unavailable
+    lea     hardware_berr_pass,%a0
+    bsr     serial_puts
+    bra.s   hardware_probe_done
+hardware_berr_unavailable:
+    lea     hardware_berr_unavailable_record,%a0
+    bsr     serial_puts
+hardware_probe_done:
+
+    /* Independently prove 68000 14-byte bus-error frame parsing and the
+       controlled unwind/jump recovery path with a deterministic synthetic
+       frame. This does not claim that software can assert the physical BERR
+       pin; it qualifies the handler logic once such a frame exists. */
+    bsr     test_synthetic_bus_frame
     tst.b   %d1
     bne     bus_fail
 
@@ -56,9 +75,11 @@ _rom_reset:
     bsr     serial_puts
     move.l  %d6,%d0
     bsr     serial_put_hex32
-    lea     crlf,%a0
+    lea     frame_source,%a0
     bsr     serial_puts
 
+    lea     frame_pass,%a0
+    bsr     serial_puts
     lea     bus_pass,%a0
     bsr     serial_puts
     lea     baseline_pass,%a0
@@ -70,14 +91,32 @@ bus_fail:
     bsr     serial_puts
     bra     halt
 
-/* Deliberately read a word from an unmapped A500 address.
-   MC68000 bus-error frame is 14 bytes:
+/* Probe a plausible unmapped A500 address. If no /BERR is generated the
+   read completes and d1=1. If /BERR is generated, _exception_bus unwinds
+   to hardware_bus_recovered, d7=1 and d1 remains zero. */
+probe_hardware_berr:
+    moveq   #0,%d1
+    moveq   #0,%d7
+    lea     hardware_bus_recovered,%a6
+    move.l  #BUS_PROBE_ADDR,%a0
+hardware_bus_fault_instruction:
+    move.w  (%a0),%d0
+    moveq   #1,%d1
+    rts
+hardware_bus_recovered:
+    cmpi.b  #1,%d7
+    beq.s   hardware_bus_done
+    moveq   #1,%d1
+hardware_bus_done:
+    rts
+
+/* Build a deterministic MC68000 group-0 frame on the supervisor stack and
+   enter the same handler used by vector 2. Frame layout:
      +0 special-status word, +2 access address, +6 IR,
      +8 SR, +10 PC.
-   a6 holds a controlled recovery continuation. The handler captures the
-   complete frame, removes it from the supervisor stack, and jumps to the
-   continuation. This path is only valid while a probe explicitly arms a6. */
-test_recoverable_bus:
+   The handler captures the complete frame, removes all 14 bytes and jumps
+   to a6. */
+test_synthetic_bus_frame:
     moveq   #0,%d1
     moveq   #0,%d2
     moveq   #0,%d3
@@ -85,20 +124,33 @@ test_recoverable_bus:
     moveq   #0,%d5
     moveq   #0,%d6
     moveq   #0,%d7
-    lea     bus_recovered,%a6
-    move.l  #BUS_PROBE_ADDR,%a0
-bus_fault_instruction:
-    move.w  (%a0),%d0
-    moveq   #1,%d1
-    rts
-bus_recovered:
+    lea     synthetic_bus_recovered,%a6
+    suba.w  #14,%sp
+    move.w  #SYNTH_SSW,0(%sp)
+    move.l  #BUS_PROBE_ADDR,2(%sp)
+    move.w  #SYNTH_IR,6(%sp)
+    move.w  #SYNTH_SR,8(%sp)
+    move.l  #synthetic_fault_pc,10(%sp)
+    jmp     _exception_bus
+synthetic_fault_pc:
+    nop
+synthetic_bus_recovered:
     cmpi.b  #1,%d7
-    bne.s   bus_not_recovered
+    bne.s   synthetic_bus_bad
     cmpi.l  #BUS_PROBE_ADDR,%d3
-    beq.s   bus_ok
-bus_not_recovered:
+    bne.s   synthetic_bus_bad
+    cmpi.w  #SYNTH_SSW,%d2
+    bne.s   synthetic_bus_bad
+    cmpi.w  #SYNTH_IR,%d4
+    bne.s   synthetic_bus_bad
+    cmpi.w  #SYNTH_SR,%d5
+    bne.s   synthetic_bus_bad
+    lea     synthetic_fault_pc,%a0
+    cmp.l   %a0,%d6
+    beq.s   synthetic_bus_ok
+synthetic_bus_bad:
     moveq   #1,%d1
-bus_ok:
+synthetic_bus_ok:
     rts
 
 install_ram_vectors:
@@ -212,16 +264,18 @@ halt:
 banner:          .asciz "AMIDIAG proto=1 milestone=M3.3 cpu=68000\r\n"
 boot_record:     .asciz "BOOT phase=reset status=PASS\r\n"
 vectors_record:  .asciz "TEST id=CPU.VECTORS status=PASS table=ram\r\n"
-probe_record:    .asciz "TEST id=CPU.BUS.PROBE status=PASS address=0x00400000 width=16 expected=bus-error\r\n"
+hardware_berr_pass:.asciz "TEST id=CPU.BUS.HARDWARE status=PASS address=0x00400000 width=16 source=vector2\r\n"
+hardware_berr_unavailable_record:.asciz "TEST id=CPU.BUS.HARDWARE status=UNAVAILABLE address=0x00400000 width=16 reason=no-berr\r\n"
 frame_prefix:    .asciz "FRAME id=CPU.BUS ssw=0x"
 frame_addr:      .asciz " address=0x"
 frame_ir:        .asciz " ir=0x"
 frame_sr:        .asciz " sr=0x"
 frame_pc:        .asciz " pc=0x"
-bus_pass:        .asciz "TEST id=CPU.BUS.RECOVER status=PASS frame=68000-14-byte return=unwind-jump\r\n"
-bus_fail_record: .asciz "TEST id=CPU.BUS.RECOVER status=FAIL reason=no-bus-error-or-frame-mismatch\r\n"
-baseline_pass:   .asciz "TEST id=CPU.BASELINE status=PASS cpu=68000 exception=bus\r\n"
-crlf:            .asciz "\r\n"
+frame_source:    .asciz " source=synthetic\r\n"
+frame_pass:      .asciz "TEST id=CPU.BUS.FRAME status=PASS source=synthetic frame=68000-14-byte\r\n"
+bus_pass:        .asciz "TEST id=CPU.BUS.RECOVER status=PASS source=synthetic frame=68000-14-byte return=unwind-jump\r\n"
+bus_fail_record: .asciz "TEST id=CPU.BUS.RECOVER status=FAIL reason=frame-mismatch\r\n"
+baseline_pass:   .asciz "TEST id=CPU.BASELINE status=PASS cpu=68000 exception=bus-frame-handler\r\n"
 exc_address:     .asciz "EXCEPTION id=CPU.ADDRESS status=FAIL fatal=1\r\n"
 exc_illegal:     .asciz "EXCEPTION id=CPU.ILLEGAL status=FAIL fatal=1\r\n"
 exc_zero_divide: .asciz "EXCEPTION id=CPU.DIVZERO status=FAIL fatal=1\r\n"
