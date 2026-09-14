@@ -15,19 +15,25 @@ AmiDiag is developed as a clean-room diagnostic ROM and hardware test platform f
 
 ## M1 — Minimal boot and serial heartbeat
 
-Implementation complete; runtime qualification remains.
-
 - [x] 68000-safe reset entry and stack setup
 - [x] conservative hardware initialization
 - [x] serial initialization without AmigaOS
 - [x] stable boot banner and build/milestone ID
 - [x] machine-readable `BOOT` and `TEST` records
-- [ ] fatal exception capture where practical
 - [x] ROM image build with size/vector validation
-- [ ] first automated emulator smoke test
+- [x] host-side deterministic transcript validator
+- [x] install low-RAM exception vectors after overlay release
+- [x] fatal exception class reporting
+- [ ] decode saved 68000 exception frames
+- [ ] automated emulator serial-capture plumbing
 - [ ] visible FS-UAE runtime qualification
+- [ ] deliberate exception qualification run
 
 Initial machine profile: A500-class OCS/ECS baseline. Keep CPU assumptions at 68000 unless a machine profile explicitly permits more.
+
+### M1.1 — Exception baseline and qualification harness
+
+Implemented. The 68000 RAM vector table, stable fatal exception records, canonical expected transcript and `make check-transcript` hook are in place. Runtime PASS is deliberately deferred until real emulator output has been captured and compared.
 
 ## M2 — Memory diagnostics
 
