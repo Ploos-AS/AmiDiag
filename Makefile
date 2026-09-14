@@ -8,12 +8,13 @@ ELF := $(BUILD)/amidiag.elf
 ROM := $(BUILD)/amidiag.rom
 EXC_ELF := $(BUILD)/amidiag-exception.elf
 EXC_ROM := $(BUILD)/amidiag-exception.rom
-EXPECTED_SERIAL := tests/m1_1/expected-serial.txt
+EXPECTED_SERIAL := tests/m1_2/expected-serial.txt
+EXPECTED_EXCEPTION_SERIAL := tests/m1_2/expected-exception-serial.txt
 
 ASFLAGS := -m68000 -msoft-float -ffreestanding -fno-builtin -nostdlib -Wall -Wextra
 LDFLAGS := -nostdlib -Wl,-T,linker.ld -Wl,-Map,$(BUILD)/amidiag.map
 
-.PHONY: all rom exception-rom check check-transcript fsuae-smoke clean
+.PHONY: all rom exception-rom check check-transcript fsuae-smoke fsuae-exception-smoke qualify-m1_2 clean
 
 all: rom
 
@@ -48,17 +49,20 @@ check: rom exception-rom
 	$(PYTHON) tools/check_rom.py $(ROM)
 	$(PYTHON) tools/check_rom.py $(EXC_ROM)
 	$(PYTHON) tools/check_serial.py $(EXPECTED_SERIAL)
+	$(PYTHON) tools/check_serial.py $(EXPECTED_EXCEPTION_SERIAL) --expect-exception CPU.ILLEGAL
 
-# Use after an emulator or real machine has captured a serial transcript:
-#   make check-transcript TRANSCRIPT=build/m1_2-serial.txt
 check-transcript:
 	@test -n "$(TRANSCRIPT)" || (echo "TRANSCRIPT=<path> is required" >&2; exit 2)
 	$(PYTHON) tools/check_serial.py $(TRANSCRIPT)
 
-# Requires FS-UAE available on the host. Override FS_UAE with a wrapper when
-# necessary, e.g. FS_UAE='xvfb-run -a fs-uae'.
 fsuae-smoke: rom
 	sh tools/run_fsuae_smoke.sh $(ROM) $(BUILD)/m1_2-fsuae-serial.txt
+
+fsuae-exception-smoke: exception-rom
+	sh tools/run_fsuae_exception.sh $(EXC_ROM) $(BUILD)/m1_2-fsuae-exception-serial.txt
+
+qualify-m1_2: check fsuae-smoke fsuae-exception-smoke
+	@echo "PASS: M1.2 host checks and both FS-UAE smoke paths"
 
 clean:
 	rm -rf $(BUILD)
