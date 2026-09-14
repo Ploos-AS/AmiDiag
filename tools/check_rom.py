@@ -7,7 +7,7 @@ ROM_BASE = 0x00F80000
 ROM_SIZE = 512 * 1024
 CHIP_RAM_MAX = 0x00200000
 REQUIRED_MARKERS = (
-    b"AMIDIAG proto=1 milestone=M2.5",
+    b"AMIDIAG proto=1 milestone=M2.6",
     b"BOOT phase=reset",
     b"BOOT.VECTORS",
     b"BOOT.SERIAL",
@@ -20,6 +20,9 @@ REQUIRED_MARKERS = (
     b"bytes=4096",
     b"cells=1024",
     b"patterns=4",
+    b"MEM.MARCH",
+    b"pairs=512",
+    b"algorithm=paired-c-minus",
     b"mode=preserve",
     b"MEM.CHIP.DISCOVER",
     b"confidence=discovered",
@@ -50,7 +53,7 @@ def main():
     for marker in REQUIRED_MARKERS:
         if marker not in data:
             fail("missing marker %r" % (marker,))
-    print("PASS: M2.5 ROM size/vectors/data/address/arena/discovery markers")
+    print("PASS: M2.6 ROM size/vectors/data/address/arena/march/discovery markers")
 
 if __name__ == "__main__":
     main()
