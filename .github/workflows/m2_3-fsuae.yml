@@ -1,0 +1,53 @@
+name: M2.3 FS-UAE qualification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-m2-3:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CROSS: m68k-linux-gnu-
+      FS_UAE: xvfb-run -a fs-uae
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install 68000 toolchain and FS-UAE
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu fs-uae xvfb python3
+
+      - name: Qualify M2.3
+        run: make clean qualify-m2_3
+
+      - name: Record qualification evidence
+        if: always()
+        run: |
+          mkdir -p build/evidence
+          m68k-linux-gnu-gcc --version | head -n1 > build/evidence/toolchain.txt || true
+          fs-uae --version > build/evidence/fs-uae-version.txt 2>&1 || true
+          sha256sum build/amidiag.rom > build/evidence/rom-sha256.txt 2>/dev/null || true
+
+      - name: Upload M2.3 qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: amidiag-m2_3-qualification
+          path: |
+            build/amidiag.rom
+            build/amidiag.map
+            build/m2_3-512-serial.txt
+            build/m2_3-1024-serial.txt
+            build/m2_3-512-fsuae.log
+            build/m2_3-1024-fsuae.log
+            build/m2_3-512.fs-uae
+            build/m2_3-1024.fs-uae
+            build/evidence/
+          if-no-files-found: warn
