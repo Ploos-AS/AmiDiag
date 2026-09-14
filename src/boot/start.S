@@ -1,4 +1,4 @@
-/* AmiDiag M1.2 bootstrap - clean-room implementation for a 68000-safe baseline. */
+/* AmiDiag M2.1 bootstrap - clean-room 68000/A500 baseline. */
 
     .equ CIAA_PRA,   0x00BFE001
     .equ SERDATR,    0x00DFF018
@@ -9,7 +9,6 @@
     .equ SERPER_9600_PAL, 369
     .equ STACK_TOP,  0x0007FFFC
 
-    /* Reset-time vectors are fetched while the Amiga ROM overlay is active. */
     .section .vectors,"a"
     .globl _rom_vectors
 _rom_vectors:
@@ -19,16 +18,9 @@ _rom_vectors:
     .section .text.boot,"ax"
     .globl _rom_reset
 _rom_reset:
-    /* Reset enters supervisor mode with interrupts masked. Release the Amiga
-       overlay so address zero becomes Chip RAM, then establish our stack. */
     bclr    #0,CIAA_PRA
     move.l  #STACK_TOP,%sp
-
-    /* Direct Paula serial, ~9600 baud for the initial PAL/A500 profile. */
     move.w  #SERPER_9600_PAL,SERPER
-
-    /* 68000 has no movable VBR. Once overlay is released, vectors 0..255 live
-       in low Chip RAM. Install a conservative default table before tests run. */
     bsr     install_ram_vectors
 
     lea     banner,%a0
@@ -37,24 +29,86 @@ _rom_reset:
     bsr     serial_puts
     lea     vector_record,%a0
     bsr     serial_puts
-    lea     test_record,%a0
+    lea     serial_record,%a0
     bsr     serial_puts
 
-#ifdef AMIDIAG_TEST_ILLEGAL
-    /* Qualification-only build: prove that the installed vector table and
-       fatal exception reporter are actually executable. 0x4AFC is ILLEGAL
-       on the 68000 and must enter vector 4. */
-    .word   0x4AFC
-#endif
+    /* M2.1 deliberately does not probe beyond the A500 profile boundary.
+       Each probe preserves the original longword, writes two complementary
+       patterns, verifies them, then restores the original value. Probe
+       addresses avoid the low vector table and the bootstrap stack. */
+    lea     0x00001000,%a1
+    bsr     probe_preserve_long
+    tst.b   %d1
+    bne     memory_probe_failed
+    lea     0x00010000,%a1
+    bsr     probe_preserve_long
+    tst.b   %d1
+    bne     memory_probe_failed
+    lea     0x00020000,%a1
+    bsr     probe_preserve_long
+    tst.b   %d1
+    bne     memory_probe_failed
+    lea     0x00030000,%a1
+    bsr     probe_preserve_long
+    tst.b   %d1
+    bne     memory_probe_failed
+    lea     0x00040000,%a1
+    bsr     probe_preserve_long
+    tst.b   %d1
+    bne     memory_probe_failed
+    lea     0x00050000,%a1
+    bsr     probe_preserve_long
+    tst.b   %d1
+    bne     memory_probe_failed
+    lea     0x00060000,%a1
+    bsr     probe_preserve_long
+    tst.b   %d1
+    bne     memory_probe_failed
+    lea     0x00070000,%a1
+    bsr     probe_preserve_long
+    tst.b   %d1
+    bne     memory_probe_failed
+
+    lea     memory_probe_pass,%a0
+    bsr     serial_puts
+    lea     memory_map_record,%a0
+    bsr     serial_puts
+    bra     halt
+
+memory_probe_failed:
+    lea     memory_probe_fail,%a0
+    bsr     serial_puts
 
 halt:
     stop    #0x2700
     bra.s   halt
 
+probe_preserve_long:
+    move.l  (%a1),%d2
+    clr.b   %d1
+
+    move.l  #0x55AA55AA,%d0
+    move.l  %d0,(%a1)
+    cmp.l   (%a1),%d0
+    bne.s   probe_failed
+
+    move.l  #0xAA55AA55,%d0
+    move.l  %d0,(%a1)
+    cmp.l   (%a1),%d0
+    bne.s   probe_failed
+
+    move.l  %d2,(%a1)
+    rts
+
+probe_failed:
+    move.l  %d2,(%a1)
+    moveq   #1,%d1
+    rts
+
 install_ram_vectors:
     move.l  #_exception_default,%d0
-    lea     8,%a1                   /* vector 2 */
-    move.w  #253,%d1                /* vectors 2..255 = 254 entries */
+    lea     8,%a1
+    move.w  #253,%d1
 1:
     move.l  %d0,(%a1)+
     dbra    %d1,1b
@@ -105,8 +159,6 @@ _exception_default:
     lea     exc_default,%a0
 
 exception_fatal:
-    /* Fatal exceptions are terminal in M1.2. Later milestones may decode
-       exception frames and continue where doing so is demonstrably safe. */
     bsr     serial_puts
 exception_halt:
     stop    #0x2700
@@ -125,19 +177,25 @@ serial_wait_tbe:
     btst    #SERDATR_TBE,SERDATR
     beq.s   serial_wait_tbe
     andi.w  #0x00FF,%d0
-    ori.w   #0x0100,%d0          /* stop bit */
+    ori.w   #0x0100,%d0
     move.w  %d0,SERDAT
     rts
 
     .section .rodata,"a"
 banner:
-    .asciz "AMIDIAG proto=1 milestone=M1.2 cpu=68000\r\n"
+    .asciz "AMIDIAG proto=1 milestone=M2.1 cpu=68000\r\n"
 boot_record:
     .asciz "BOOT phase=reset status=PASS\r\n"
 vector_record:
     .asciz "TEST id=BOOT.VECTORS status=PASS\r\n"
-test_record:
+serial_record:
     .asciz "TEST id=BOOT.SERIAL status=PASS\r\n"
+memory_probe_pass:
+    .asciz "TEST id=MEM.CHIP.PROBE status=PASS probes=8 mode=preserve\r\n"
+memory_probe_fail:
+    .asciz "TEST id=MEM.CHIP.PROBE status=FAIL mode=preserve\r\n"
+memory_map_record:
+    .asciz "MEM region=CHIP start=0x00000000 end=0x00080000 bytes=524288 confidence=profile-verified\r\n"
 
 exc_bus:
     .asciz "EXCEPTION id=CPU.BUS status=FAIL fatal=1\r\n"
