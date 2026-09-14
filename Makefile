@@ -6,12 +6,13 @@ PYTHON ?= python3
 BUILD := build
 ELF := $(BUILD)/amidiag.elf
 ROM := $(BUILD)/amidiag.rom
-EXPECTED_SERIAL := tests/m2_1/expected-serial.txt
+EXPECTED_512 := tests/m2_2/expected-512.txt
+EXPECTED_1024 := tests/m2_2/expected-1024.txt
 
 ASFLAGS := -m68000 -msoft-float -ffreestanding -fno-builtin -nostdlib -Wall -Wextra
 LDFLAGS := -nostdlib -Wl,-T,linker.ld -Wl,-Map,$(BUILD)/amidiag.map
 
-.PHONY: all rom check check-transcript fsuae-smoke qualify-m2_1 clean
+.PHONY: all rom check fsuae-smoke-512 fsuae-smoke-1024 qualify-m2_2 clean
 
 all: rom
 
@@ -32,17 +33,17 @@ rom: $(ROM)
 
 check: rom
 	$(PYTHON) tools/check_rom.py $(ROM)
-	$(PYTHON) tools/check_serial.py $(EXPECTED_SERIAL)
+	$(PYTHON) tools/check_serial.py $(EXPECTED_512) --chip-kib 512
+	$(PYTHON) tools/check_serial.py $(EXPECTED_1024) --chip-kib 1024
 
-check-transcript:
-	@test -n "$(TRANSCRIPT)" || (echo "TRANSCRIPT=<path> is required" >&2; exit 2)
-	$(PYTHON) tools/check_serial.py $(TRANSCRIPT)
+fsuae-smoke-512: rom
+	CHIP_KIB=512 AMIDIAG_SERIAL_PORT=1234 sh tools/run_fsuae_smoke.sh $(ROM) $(BUILD)/m2_2-512-serial.txt
 
-fsuae-smoke: rom
-	sh tools/run_fsuae_smoke.sh $(ROM) $(BUILD)/m2_1-fsuae-serial.txt
+fsuae-smoke-1024: rom
+	CHIP_KIB=1024 AMIDIAG_SERIAL_PORT=1235 sh tools/run_fsuae_smoke.sh $(ROM) $(BUILD)/m2_2-1024-serial.txt
 
-qualify-m2_1: check fsuae-smoke
-	@echo "PASS: M2.1 host checks and FS-UAE memory-probe path"
+qualify-m2_2: check fsuae-smoke-512 fsuae-smoke-1024
+	@echo "PASS: M2.2 host checks and 512/1024 KiB FS-UAE discovery paths"
 
 clean:
 	rm -rf $(BUILD)
