@@ -15,21 +15,31 @@ AmiDiag is an independent implementation. It does not copy or derive source code
 - build and preserve machine-specific ROM variants
 - run reproducible regression tests under emulation and later on real hardware
 
-## M0 status
+## Status
 
-M0 establishes the clean-room rules, architecture, project layout, initial diagnostic protocol, supported-machine roadmap and qualification strategy. No third-party diagnostic ROM source is imported.
+- M0 Foundation: complete
+- M1 Minimal boot + serial heartbeat: implemented, awaiting runtime qualification
 
-See:
+M1 now contains the first standalone 68000 bootstrap, direct serial heartbeat, 512 KiB ROM layout and host-side ROM validation. See `docs/M1_STATUS.md`.
 
-- `ROADMAP.md`
-- `docs/M0_ARCHITECTURE.md`
-- `docs/CLEAN_ROOM.md`
-- `docs/DIAGNOSTIC_PROTOCOL.md`
-- `docs/M0_STATUS.md`
+## Build
+
+A m68k Amiga cross-toolchain providing `m68k-amigaos-gcc` and `m68k-amigaos-objcopy` is expected.
+
+```sh
+make clean
+make check
+```
+
+The ROM is generated as `build/amidiag.rom`. A successful host-side check is not a runtime qualification result.
 
 ## Initial target
 
-The first executable target will be a 68000-safe diagnostic ROM for the OCS/ECS Amiga family, with serial output as the earliest dependable reporting channel. Hardware-specific functionality is layered so later AGA and 32-bit machines can share the same diagnostic core.
+The first executable target is a 68000-safe diagnostic ROM for the OCS/ECS Amiga family, with serial output as the earliest dependable reporting channel. Hardware-specific functionality is layered so later AGA and 32-bit machines can share the same diagnostic core.
+
+## Clean-room documentation
+
+See `docs/CLEAN_ROOM.md`, `docs/M0_ARCHITECTURE.md` and `docs/DIAGNOSTIC_PROTOCOL.md`.
 
 ## Sister projects
 
