@@ -24,16 +24,23 @@ AmiDiag is developed as a clean-room diagnostic ROM and hardware test platform f
 - [x] host-side deterministic transcript validator
 - [x] install low-RAM exception vectors after overlay release
 - [x] fatal exception class reporting
+- [x] automated emulator serial-capture plumbing
+- [x] deliberate exception qualification run
+- [x] GitHub runner FS-UAE runtime qualification
 - [ ] decode saved 68000 exception frames
-- [ ] automated emulator serial-capture plumbing
-- [ ] visible FS-UAE runtime qualification
-- [ ] deliberate exception qualification run
+- [ ] visible local FS-UAE runtime qualification
 
 Initial machine profile: A500-class OCS/ECS baseline. Keep CPU assumptions at 68000 unless a machine profile explicitly permits more.
 
 ### M1.1 — Exception baseline and qualification harness
 
-Implemented. The 68000 RAM vector table, stable fatal exception records, canonical expected transcript and `make check-transcript` hook are in place. Runtime PASS is deliberately deferred until real emulator output has been captured and compared.
+Implemented. The 68000 RAM vector table, stable fatal exception records, canonical expected transcript and transcript validation hook are in place.
+
+### M1.2 — Automated FS-UAE runtime qualification
+
+**PASS on GitHub Actions run #3 (run ID `34844888592`).** Both normal boot and deliberate `CPU.ILLEGAL` qualification paths passed under FS-UAE on Ubuntu 24.04, including serial transcript verification and runner evidence upload. M1 is frozen at automated runner qualification level.
+
+Saved-frame decoding remains a later CPU-diagnostics enhancement rather than an M1 blocker. Visible local FS-UAE qualification is retained as later human-observable evidence and does not block M2.
 
 ## M2 — Memory diagnostics
 
