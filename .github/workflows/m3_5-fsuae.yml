@@ -1,0 +1,53 @@
+name: M3.5 FS-UAE qualification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-m3-5:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CROSS: m68k-linux-gnu-
+      FS_UAE: xvfb-run -a fs-uae
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install 68000 toolchain and FS-UAE
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu fs-uae xvfb python3
+
+      - name: Qualify M3.5
+        run: make clean qualify-m3_5
+
+      - name: Record qualification evidence
+        if: always()
+        run: |
+          mkdir -p build/evidence
+          m68k-linux-gnu-gcc --version | head -n1 > build/evidence/toolchain.txt || true
+          fs-uae --version > build/evidence/fs-uae-version.txt 2>&1 || true
+          sha256sum build/amidiag-m3_5.rom > build/evidence/m3_5-rom-sha256.txt 2>/dev/null || true
+
+      - name: Upload M3.5 qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: amidiag-m3_5-qualification
+          path: |
+            build/amidiag-m3_5.rom
+            build/amidiag-m3_5.map
+            build/m3_5-512-serial.txt
+            build/m3_5-1024-serial.txt
+            build/m3_5-512-fsuae.log
+            build/m3_5-1024-fsuae.log
+            build/m3_5-512.fs-uae
+            build/m3_5-1024.fs-uae
+            build/evidence/
+          if-no-files-found: warn
