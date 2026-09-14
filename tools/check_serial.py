@@ -4,10 +4,11 @@ import pathlib
 import sys
 
 BASE = [
-    "AMIDIAG proto=1 milestone=M2.6 cpu=68000",
+    "AMIDIAG proto=1 milestone=M2.7 cpu=68000",
     "BOOT phase=reset status=PASS",
     "TEST id=BOOT.VECTORS status=PASS",
     "TEST id=BOOT.SERIAL status=PASS",
+    "TEST id=MEM.FAULT.REPORT status=PASS fields=test,address,expected,actual format=hex32",
     "TEST id=MEM.DATA status=PASS width=32 patterns=64 mode=preserve",
     "TEST id=MEM.ADDRESS status=PASS bits=A2-A18 probes=17 mode=preserve-alias",
     "TEST id=MEM.ARENA status=PASS start=0x00006000 bytes=4096 cells=1024 patterns=4 mode=preserve",
@@ -44,10 +45,13 @@ def main():
     failed_tests = [x for x in lines if x.startswith("TEST ") and "status=FAIL" in x]
     if failed_tests:
         fail("failed test record present: %s" % failed_tests[0])
+    faults = [x for x in lines if x.startswith("FAULT ")]
+    if faults:
+        fail("unexpected fault record present: %s" % faults[0])
     fatal = [x for x in lines if x.startswith("EXCEPTION ") and "status=FAIL" in x]
     if fatal:
         fail("fatal exception record present: %s" % fatal[0])
-    print("PASS: M2.6 data/address/arena/paired-March tests and %d KiB Chip RAM discovery" % a.chip_kib)
+    print("PASS: M2.7 fault-report capability and RAM diagnostics with %d KiB Chip RAM" % a.chip_kib)
 
 if __name__ == "__main__":
     main()
