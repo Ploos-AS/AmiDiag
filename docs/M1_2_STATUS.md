@@ -1,6 +1,6 @@
 # M1.2 Status — FS-UAE runtime qualification harness
 
-Status: **IMPLEMENTED / GITHUB RUNNER QUALIFICATION ENABLED**
+Status: **PASS — GITHUB RUNNER RUNTIME QUALIFIED**
 
 M1.2 turns the M1/M1.1 bootstrap into a reproducible runtime-qualification target.
 
@@ -50,6 +50,23 @@ A complete automated M1.2 runtime PASS requires all of the following:
    - `EXCEPTION id=CPU.ILLEGAL status=FAIL fatal=1`
 6. The deliberate exception is reached through the installed RAM vector table, proving that vector 4 and the fatal reporter are live after ROM overlay release.
 
+## Qualification result
+
+GitHub Actions run **#3**, run ID `34844888592`, completed successfully on Ubuntu 24.04.
+
+Runner-observed PASS scope:
+
+- 68000 cross-build: PASS
+- normal ROM host validation: PASS
+- exception ROM host validation: PASS
+- normal FS-UAE serial boot path: PASS
+- RAM vector-table path: PASS
+- deliberate `CPU.ILLEGAL` exception path: PASS
+- expected-exception transcript validation: PASS
+- qualification artifact upload: PASS
+
+This is sufficient to mark M1.2 runtime-qualified on the automated runner path.
+
 ## Local qualification
 
 Local execution remains useful but is no longer required for routine automated qualification:
@@ -66,7 +83,7 @@ For graphical-less hosts:
 make qualify-m1_2 FS_UAE='xvfb-run -a fs-uae'
 ```
 
-A later visible FS-UAE run is retained as human-observable qualification evidence, rather than blocking every milestone on local execution.
+A later visible local FS-UAE run is retained as human-observable evidence and may be performed together with later visual/hardware milestones. It does not block M2 development.
 
 ## Evidence retained by the runner
 
@@ -85,4 +102,4 @@ The `amidiag-m1_2-qualification` artifact contains, where produced:
 
 ## Current verdict
 
-The GitHub runner qualification path is now implemented. A runtime PASS is claimed only when the workflow itself completes successfully; workflow setup alone is not treated as qualification evidence.
+**M1.2 PASS.** The automated M1 bootstrap, serial path, low-RAM vector installation and deliberate exception path are runtime-qualified under FS-UAE on the GitHub runner. M1 may now be frozen at runner qualification level and development can proceed to M2 memory diagnostics.
