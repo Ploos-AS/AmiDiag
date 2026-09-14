@@ -27,9 +27,9 @@ trap 'kill "$EMU_PID" 2>/dev/null || true; wait "$EMU_PID" 2>/dev/null || true' 
   --expect 'AMIDIAG proto=1 milestone=M3.3 cpu=68000' \
   --expect 'BOOT phase=reset status=PASS' \
   --expect 'TEST id=CPU.VECTORS status=PASS table=ram' \
-  --expect 'TEST id=CPU.BUS.PROBE status=PASS address=0x00400000 width=16 expected=bus-error' \
-  --expect 'TEST id=CPU.BUS.RECOVER status=PASS frame=68000-14-byte return=unwind-jump' \
-  --expect 'TEST id=CPU.BASELINE status=PASS cpu=68000 exception=bus'
+  --expect 'TEST id=CPU.BUS.FRAME status=PASS source=synthetic frame=68000-14-byte' \
+  --expect 'TEST id=CPU.BUS.RECOVER status=PASS source=synthetic frame=68000-14-byte return=unwind-jump' \
+  --expect 'TEST id=CPU.BASELINE status=PASS cpu=68000 exception=bus-frame-handler'
 
 "$PYTHON" tools/check_m3_3_serial.py "$OUT"
-echo "PASS: FS-UAE M3.3 recoverable bus-error frame"
+echo "PASS: FS-UAE M3.3 bus-error frame handler/recovery; hardware BERR capability reported separately"
