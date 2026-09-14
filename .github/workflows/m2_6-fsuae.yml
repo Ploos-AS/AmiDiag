@@ -1,9 +1,6 @@
 name: M2.6 FS-UAE qualification
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -19,12 +16,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Historical qualification notice
+        run: |
+          echo "M2.6 is frozen. Re-run from its qualified commit for historical evidence."
+          echo "Qualified evidence: GitHub Actions run 34876009901."
+
       - name: Install 68000 toolchain and FS-UAE
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu fs-uae xvfb python3
 
-      - name: Qualify M2.6
+      - name: Qualify historical M2.6
         run: make clean qualify-m2_6
 
       - name: Record qualification evidence
