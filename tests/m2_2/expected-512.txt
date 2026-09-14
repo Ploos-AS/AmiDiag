@@ -1,0 +1,6 @@
+AMIDIAG proto=1 milestone=M2.2 cpu=68000
+BOOT phase=reset status=PASS
+TEST id=BOOT.VECTORS status=PASS
+TEST id=BOOT.SERIAL status=PASS
+TEST id=MEM.CHIP.DISCOVER status=PASS step=524288 mode=preserve-alias
+MEM region=CHIP start=0x00000000 end=0x00080000 bytes=524288 confidence=discovered
