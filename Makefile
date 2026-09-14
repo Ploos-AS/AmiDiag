@@ -16,6 +16,8 @@ M3_3_ELF := $(BUILD)/amidiag-m3_3.elf
 M3_3_ROM := $(BUILD)/amidiag-m3_3.rom
 M3_4_ELF := $(BUILD)/amidiag-m3_4.elf
 M3_4_ROM := $(BUILD)/amidiag-m3_4.rom
+M3_5_ELF := $(BUILD)/amidiag-m3_5.elf
+M3_5_ROM := $(BUILD)/amidiag-m3_5.rom
 EXPECTED_512 := tests/m2_7/expected-512.txt
 EXPECTED_1024 := tests/m2_7/expected-1024.txt
 FAULT_FIXTURE := tests/m2_7/fault-records.txt
@@ -27,10 +29,11 @@ M3_1_LDFLAGS := -nostdlib -Wl,-T,linker.ld -Wl,-Map,$(BUILD)/amidiag-m3_1.map
 M3_2_LDFLAGS := -nostdlib -Wl,-T,linker.ld -Wl,-Map,$(BUILD)/amidiag-m3_2.map
 M3_3_LDFLAGS := -nostdlib -Wl,-T,linker.ld -Wl,-Map,$(BUILD)/amidiag-m3_3.map
 M3_4_LDFLAGS := -nostdlib -Wl,-T,linker.ld -Wl,-Map,$(BUILD)/amidiag-m3_4.map
+M3_5_LDFLAGS := -nostdlib -Wl,-T,linker.ld -Wl,-Map,$(BUILD)/amidiag-m3_5.map
 
-.PHONY: all rom destructive-rom m3_1-rom m3_2-rom m3_3-rom m3_4-rom check check-destructive check-m3_1 check-m3_2 check-m3_3 check-m3_4 fsuae-smoke-512 fsuae-smoke-1024 fsuae-destructive fsuae-m3_1 fsuae-m3_2 fsuae-m3_3 fsuae-m3_4 qualify-m2_7 qualify-m2_8 qualify-m3_1 qualify-m3_2 qualify-m3_3 qualify-m3_4 clean
+.PHONY: all rom destructive-rom m3_1-rom m3_2-rom m3_3-rom m3_4-rom m3_5-rom check check-destructive check-m3_1 check-m3_2 check-m3_3 check-m3_4 check-m3_5 fsuae-smoke-512 fsuae-smoke-1024 fsuae-destructive fsuae-m3_1 fsuae-m3_2 fsuae-m3_3 fsuae-m3_4 fsuae-m3_5-512 fsuae-m3_5-1024 qualify-m2_7 qualify-m2_8 qualify-m3_1 qualify-m3_2 qualify-m3_3 qualify-m3_4 qualify-m3_5 clean
 
-all: rom destructive-rom m3_1-rom m3_2-rom m3_3-rom m3_4-rom
+all: rom destructive-rom m3_1-rom m3_2-rom m3_3-rom m3_4-rom m3_5-rom
 
 $(BUILD):
 	mkdir -p $(BUILD)
@@ -53,6 +56,9 @@ $(BUILD)/m3_3_boot.o: src/cpu/m3_3_boot.S | $(BUILD)
 $(BUILD)/m3_4_boot.o: src/cpu/m3_4_boot.S | $(BUILD)
 	$(CC) $(ASFLAGS) -c $< -o $@
 
+$(BUILD)/m3_5_boot.o: src/cpu/m3_5_boot.S | $(BUILD)
+	$(CC) $(ASFLAGS) -c $< -o $@
+
 $(ELF): $(BUILD)/start.o linker.ld
 	$(CC) $(ASFLAGS) $(LDFLAGS) $(BUILD)/start.o -o $@
 
@@ -70,6 +76,9 @@ $(M3_3_ELF): $(BUILD)/m3_3_boot.o linker.ld
 
 $(M3_4_ELF): $(BUILD)/m3_4_boot.o linker.ld
 	$(CC) $(ASFLAGS) $(M3_4_LDFLAGS) $(BUILD)/m3_4_boot.o -o $@
+
+$(M3_5_ELF): $(BUILD)/m3_5_boot.o linker.ld
+	$(CC) $(ASFLAGS) $(M3_5_LDFLAGS) $(BUILD)/m3_5_boot.o -o $@
 
 $(ROM): $(ELF)
 	$(OBJCOPY) -O binary $< $@
@@ -95,12 +104,17 @@ $(M3_4_ROM): $(M3_4_ELF)
 	$(OBJCOPY) -O binary $< $@
 	truncate -s 524288 $@
 
+$(M3_5_ROM): $(M3_5_ELF)
+	$(OBJCOPY) -O binary $< $@
+	truncate -s 524288 $@
+
 rom: $(ROM)
 destructive-rom: $(DESTRUCTIVE_ROM)
 m3_1-rom: $(M3_1_ROM)
 m3_2-rom: $(M3_2_ROM)
 m3_3-rom: $(M3_3_ROM)
 m3_4-rom: $(M3_4_ROM)
+m3_5-rom: $(M3_5_ROM)
 
 check: rom
 	$(PYTHON) tools/check_rom.py $(ROM)
@@ -123,6 +137,9 @@ check-m3_3: m3_3-rom
 check-m3_4: m3_4-rom
 	$(PYTHON) tools/check_m3_4_rom.py $(M3_4_ROM)
 
+check-m3_5: m3_5-rom
+	$(PYTHON) tools/check_m3_5_rom.py $(M3_5_ROM)
+
 fsuae-smoke-512: rom
 	CHIP_KIB=512 AMIDIAG_SERIAL_PORT=1234 sh tools/run_fsuae_smoke.sh $(ROM) $(BUILD)/m2_7-512-serial.txt
 
@@ -144,6 +161,12 @@ fsuae-m3_3: m3_3-rom
 fsuae-m3_4: m3_4-rom
 	AMIDIAG_SERIAL_PORT=1240 sh tools/run_fsuae_m3_4.sh $(M3_4_ROM) $(BUILD)/m3_4-serial.txt
 
+fsuae-m3_5-512: m3_5-rom
+	CHIP_KIB=512 AMIDIAG_SERIAL_PORT=1241 sh tools/run_fsuae_m3_5.sh $(M3_5_ROM) $(BUILD)/m3_5-512-serial.txt
+
+fsuae-m3_5-1024: m3_5-rom
+	CHIP_KIB=1024 AMIDIAG_SERIAL_PORT=1242 sh tools/run_fsuae_m3_5.sh $(M3_5_ROM) $(BUILD)/m3_5-1024-serial.txt
+
 qualify-m2_7: check fsuae-smoke-512 fsuae-smoke-1024
 	@echo "PASS: M2.7 host checks, RAM fault reporting, and 512/1024 KiB FS-UAE paths"
 
@@ -161,6 +184,9 @@ qualify-m3_3: check-m3_3 fsuae-m3_3
 
 qualify-m3_4: check-m3_4 fsuae-m3_4
 	@echo "PASS: M3.4 guarded probe primitive with readable/address/unmapped classification"
+
+qualify-m3_5: check-m3_5 fsuae-m3_5-512 fsuae-m3_5-1024
+	@echo "PASS: M3.5 guarded preserve/alias Chip RAM candidate classification on 512/1024 KiB profiles"
 
 clean:
 	rm -rf $(BUILD)
