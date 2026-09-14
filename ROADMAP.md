@@ -15,14 +15,17 @@ AmiDiag is developed as a clean-room diagnostic ROM and hardware test platform f
 
 ## M1 — Minimal boot and serial heartbeat
 
-- 68000-safe reset entry and stack setup
-- conservative hardware initialization
-- serial initialization without AmigaOS
-- stable boot banner and build ID
-- machine-readable `BOOT` and `TEST` records
-- fatal exception capture where practical
-- ROM image build with checksum/size validation
-- first automated emulator smoke test
+Implementation complete; runtime qualification remains.
+
+- [x] 68000-safe reset entry and stack setup
+- [x] conservative hardware initialization
+- [x] serial initialization without AmigaOS
+- [x] stable boot banner and build/milestone ID
+- [x] machine-readable `BOOT` and `TEST` records
+- [ ] fatal exception capture where practical
+- [x] ROM image build with size/vector validation
+- [ ] first automated emulator smoke test
+- [ ] visible FS-UAE runtime qualification
 
 Initial machine profile: A500-class OCS/ECS baseline. Keep CPU assumptions at 68000 unless a machine profile explicitly permits more.
 
