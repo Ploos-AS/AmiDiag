@@ -1,4 +1,4 @@
-/* AmiDiag M2.6 bootstrap - clean-room 68000 Chip RAM diagnostics. */
+/* AmiDiag M2.7 bootstrap - clean-room 68000 Chip RAM diagnostics. */
 
     .equ CIAA_PRA,   0x00BFE001
     .equ SERDATR,    0x00DFF018
@@ -36,6 +36,8 @@ _rom_reset:
     bsr     serial_puts
     lea     serial_record,%a0
     bsr     serial_puts
+    lea     fault_report_ready,%a0
+    bsr     serial_puts
 
     bsr     test_data_lines
     tst.b   %d1
@@ -45,6 +47,8 @@ _rom_reset:
     bra.s   test_address
 
 data_fail:
+    lea     fault_test_data,%a0
+    bsr     serial_report_mem_fault
     lea     data_fail_record,%a0
     bsr     serial_puts
     bra     halt
@@ -58,6 +62,8 @@ test_address:
     bra.s   test_arena
 
 address_fail:
+    lea     fault_test_address,%a0
+    bsr     serial_report_mem_fault
     lea     address_fail_record,%a0
     bsr     serial_puts
     bra     halt
@@ -71,14 +77,12 @@ test_arena:
     bra.s   test_march
 
 arena_fail:
+    lea     fault_test_arena,%a0
+    bsr     serial_report_mem_fault
     lea     arena_fail_record,%a0
     bsr     serial_puts
     bra     halt
 
-/* M2.6 paired March C- test. Two adjacent longwords are preserved in
-   registers, exercised in ascending and descending order, then restored.
-   This adds local coupling/transition coverage without a destructive
-   shadow buffer elsewhere in Chip RAM. */
 test_march:
     bsr     test_paired_march_c_minus
     tst.b   %d1
@@ -88,6 +92,8 @@ test_march:
     bra.s   discover_chip
 
 march_fail:
+    lea     fault_test_march,%a0
+    bsr     serial_report_mem_fault
     lea     march_fail_record,%a0
     bsr     serial_puts
     bra     halt
@@ -97,17 +103,14 @@ discover_chip:
     bsr     probe_bank_distinct
     tst.b   %d1
     bne     found_512k
-
     lea     0x00101000,%a1
     bsr     probe_bank_distinct
     tst.b   %d1
     bne     found_1m
-
     lea     0x00181000,%a1
     bsr     probe_bank_distinct
     tst.b   %d1
     bne     found_1536k
-
 found_2m:
     lea     discover_pass,%a0
     bsr     serial_puts
@@ -136,6 +139,7 @@ halt:
     stop    #0x2700
     bra.s   halt
 
+/* On FAIL: d2=address, d3=expected, d6=actual. */
 test_data_lines:
     move.l  #DATA_TEST_ADDR,%a3
     move.l  (%a3),%d4
@@ -145,7 +149,7 @@ test_data_lines:
 walk_one_loop:
     move.l  %d0,(%a3)
     cmp.l   (%a3),%d0
-    bne.s   data_test_failed
+    bne.s   data_fail_one
     lsl.l   #1,%d0
     dbra    %d5,walk_one_loop
     moveq   #1,%d0
@@ -155,17 +159,26 @@ walk_zero_loop:
     not.l   %d6
     move.l  %d6,(%a3)
     cmp.l   (%a3),%d6
-    bne.s   data_test_failed
+    bne.s   data_fail_zero
     lsl.l   #1,%d0
     dbra    %d5,walk_zero_loop
-    bra.s   data_test_restore
-
-data_test_failed:
+    bra.s   data_restore
+data_fail_one:
+    move.l  %a3,%d2
+    move.l  %d0,%d3
+    move.l  (%a3),%d6
     moveq   #1,%d1
-data_test_restore:
+    bra.s   data_restore
+data_fail_zero:
+    move.l  %a3,%d2
+    move.l  %d6,%d3
+    move.l  (%a3),%d6
+    moveq   #1,%d1
+data_restore:
     move.l  %d4,(%a3)
     rts
 
+/* On FAIL: d2=address, d3=expected, d6=actual. */
 test_address_lines:
     move.l  #ADDR_TEST_BASE,%a2
     moveq   #4,%d0
@@ -173,21 +186,39 @@ test_address_lines:
 address_loop:
     move.l  %a2,%a1
     adda.l  %d0,%a1
-    move.l  (%a2),%d2
-    move.l  (%a1),%d3
-    moveq   #1,%d1
+    move.l  (%a2),%d4
+    move.l  (%a1),%d7
+    moveq   #0,%d1
+
     move.l  #0x55AA33CC,(%a2)
     cmp.l   #0x55AA33CC,(%a2)
-    bne.s   address_restore
+    bne.s   address_fail_base
     move.l  #0xAA55CC33,(%a1)
     cmp.l   #0xAA55CC33,(%a1)
-    bne.s   address_restore
+    bne.s   address_fail_candidate
     cmp.l   #0x55AA33CC,(%a2)
-    bne.s   address_restore
-    moveq   #0,%d1
+    bne.s   address_fail_alias
+    bra.s   address_restore
+address_fail_base:
+    move.l  %a2,%d2
+    move.l  #0x55AA33CC,%d3
+    move.l  (%a2),%d6
+    moveq   #1,%d1
+    bra.s   address_restore
+address_fail_candidate:
+    move.l  %a1,%d2
+    move.l  #0xAA55CC33,%d3
+    move.l  (%a1),%d6
+    moveq   #1,%d1
+    bra.s   address_restore
+address_fail_alias:
+    move.l  %a2,%d2
+    move.l  #0x55AA33CC,%d3
+    move.l  (%a2),%d6
+    moveq   #1,%d1
 address_restore:
-    move.l  %d3,(%a1)
-    move.l  %d2,(%a2)
+    move.l  %d7,(%a1)
+    move.l  %d4,(%a2)
     tst.b   %d1
     bne.s   address_done
     lsl.l   #1,%d0
@@ -195,6 +226,7 @@ address_restore:
 address_done:
     rts
 
+/* On FAIL arena_try_pattern leaves d2/d3/d6 populated. */
 test_arena_patterns:
     move.l  #ARENA_BASE,%a3
     move.w  #ARENA_LONGS-1,%d5
@@ -225,16 +257,17 @@ arena_restore_fail:
     move.l  %d4,(%a3)
     rts
 arena_try_pattern:
+    move.l  %d6,%d3
     move.l  %d6,(%a3)
     cmp.l   (%a3),%d6
     beq.s   arena_pattern_ok
+    move.l  %a3,%d2
+    move.l  (%a3),%d6
     moveq   #1,%d1
 arena_pattern_ok:
     rts
 
-/* d1 = 0 PASS, 1 FAIL. Each pair is restored on all paths.
-   Per pair sequence approximates March C- locally:
-   w0 both; ascending r0,w1,r1,w0; descending r0,w1,r1,w0; final r0. */
+/* Paired March C-. On FAIL d2=address, d3=expected, d6=actual. */
 test_paired_march_c_minus:
     move.l  #ARENA_BASE,%a3
     move.w  #MARCH_PAIRS-1,%d5
@@ -242,54 +275,70 @@ test_paired_march_c_minus:
 march_pair_loop:
     move.l  (%a3),%d4
     move.l  4(%a3),%d7
-
     moveq   #0,%d0
     move.l  %d0,(%a3)
     move.l  %d0,4(%a3)
 
-    /* ascending: lower then upper */
-    cmp.l   (%a3),%d0
-    bne.s   march_pair_fail
+    move.l  %a3,%a2
+    move.l  %d0,%d3
+    cmp.l   (%a2),%d0
+    bne.s   march_capture_fail
     moveq   #-1,%d6
-    move.l  %d6,(%a3)
-    cmp.l   (%a3),%d6
-    bne.s   march_pair_fail
-    move.l  %d0,(%a3)
+    move.l  %d6,(%a2)
+    move.l  %d6,%d3
+    cmp.l   (%a2),%d6
+    bne.s   march_capture_fail
+    move.l  %d0,(%a2)
 
-    cmp.l   4(%a3),%d0
-    bne.s   march_pair_fail
-    move.l  %d6,4(%a3)
-    cmp.l   4(%a3),%d6
-    bne.s   march_pair_fail
-    move.l  %d0,4(%a3)
+    lea     4(%a3),%a2
+    move.l  %d0,%d3
+    cmp.l   (%a2),%d0
+    bne.s   march_capture_fail
+    move.l  %d6,(%a2)
+    move.l  %d6,%d3
+    cmp.l   (%a2),%d6
+    bne.s   march_capture_fail
+    move.l  %d0,(%a2)
 
-    /* descending: upper then lower */
-    cmp.l   4(%a3),%d0
-    bne.s   march_pair_fail
-    move.l  %d6,4(%a3)
-    cmp.l   4(%a3),%d6
-    bne.s   march_pair_fail
-    move.l  %d0,4(%a3)
+    lea     4(%a3),%a2
+    move.l  %d0,%d3
+    cmp.l   (%a2),%d0
+    bne.s   march_capture_fail
+    move.l  %d6,(%a2)
+    move.l  %d6,%d3
+    cmp.l   (%a2),%d6
+    bne.s   march_capture_fail
+    move.l  %d0,(%a2)
 
+    move.l  %a3,%a2
+    move.l  %d0,%d3
+    cmp.l   (%a2),%d0
+    bne.s   march_capture_fail
+    move.l  %d6,(%a2)
+    move.l  %d6,%d3
+    cmp.l   (%a2),%d6
+    bne.s   march_capture_fail
+    move.l  %d0,(%a2)
+
+    move.l  %d0,%d3
     cmp.l   (%a3),%d0
-    bne.s   march_pair_fail
-    move.l  %d6,(%a3)
-    cmp.l   (%a3),%d6
-    bne.s   march_pair_fail
-    move.l  %d0,(%a3)
-
-    cmp.l   (%a3),%d0
-    bne.s   march_pair_fail
+    bne.s   march_fail_lower_final
     cmp.l   4(%a3),%d0
-    bne.s   march_pair_fail
+    bne.s   march_fail_upper_final
 
     move.l  %d4,(%a3)
     move.l  %d7,4(%a3)
     addq.l  #8,%a3
     dbra    %d5,march_pair_loop
     rts
-
-march_pair_fail:
+march_fail_lower_final:
+    move.l  %a3,%a2
+    bra.s   march_capture_fail
+march_fail_upper_final:
+    lea     4(%a3),%a2
+march_capture_fail:
+    move.l  %a2,%d2
+    move.l  (%a2),%d6
     moveq   #1,%d1
     move.l  %d4,(%a3)
     move.l  %d7,4(%a3)
@@ -350,6 +399,52 @@ exception_halt:
     stop    #0x2700
     bra.s   exception_halt
 
+/* a0=test name; d2=address; d3=expected; d6=actual. */
+serial_report_mem_fault:
+    movem.l %d0-%d1/%d4-%d5/%a0,-(%sp)
+    move.l  %a0,%a1
+    lea     fault_prefix,%a0
+    bsr     serial_puts
+    move.l  %a1,%a0
+    bsr     serial_puts
+    lea     fault_address,%a0
+    bsr     serial_puts
+    move.l  %d2,%d0
+    bsr     serial_put_hex32
+    lea     fault_expected,%a0
+    bsr     serial_puts
+    move.l  %d3,%d0
+    bsr     serial_put_hex32
+    lea     fault_actual,%a0
+    bsr     serial_puts
+    move.l  %d6,%d0
+    bsr     serial_put_hex32
+    lea     crlf,%a0
+    bsr     serial_puts
+    movem.l (%sp)+,%d0-%d1/%d4-%d5/%a0
+    rts
+
+serial_put_hex32:
+    movem.l %d1-%d3,-(%sp)
+    move.l  %d0,%d2
+    moveq   #7,%d3
+hex_loop:
+    rol.l   #4,%d2
+    move.l  %d2,%d1
+    andi.w  #0x000F,%d1
+    cmpi.b  #9,%d1
+    ble.s   hex_digit
+    addi.b  #('A'-10),%d1
+    bra.s   hex_emit
+hex_digit:
+    addi.b  #'0',%d1
+hex_emit:
+    move.b  %d1,%d0
+    bsr     serial_putc
+    dbra    %d3,hex_loop
+    movem.l (%sp)+,%d1-%d3
+    rts
+
 serial_puts:
     move.b  (%a0)+,%d0
     beq.s   serial_puts_done
@@ -367,10 +462,11 @@ serial_wait_tbe:
     rts
 
     .section .rodata,"a"
-banner:          .asciz "AMIDIAG proto=1 milestone=M2.6 cpu=68000\r\n"
+banner:          .asciz "AMIDIAG proto=1 milestone=M2.7 cpu=68000\r\n"
 boot_record:     .asciz "BOOT phase=reset status=PASS\r\n"
 vector_record:   .asciz "TEST id=BOOT.VECTORS status=PASS\r\n"
 serial_record:   .asciz "TEST id=BOOT.SERIAL status=PASS\r\n"
+fault_report_ready:.asciz "TEST id=MEM.FAULT.REPORT status=PASS fields=test,address,expected,actual format=hex32\r\n"
 data_pass:       .asciz "TEST id=MEM.DATA status=PASS width=32 patterns=64 mode=preserve\r\n"
 data_fail_record:.asciz "TEST id=MEM.DATA status=FAIL width=32 mode=preserve\r\n"
 address_pass:    .asciz "TEST id=MEM.ADDRESS status=PASS bits=A2-A18 probes=17 mode=preserve-alias\r\n"
@@ -384,6 +480,15 @@ map_512k:        .asciz "MEM region=CHIP start=0x00000000 end=0x00080000 bytes=5
 map_1m:          .asciz "MEM region=CHIP start=0x00000000 end=0x00100000 bytes=1048576 confidence=discovered\r\n"
 map_1536k:       .asciz "MEM region=CHIP start=0x00000000 end=0x00180000 bytes=1572864 confidence=discovered\r\n"
 map_2m:          .asciz "MEM region=CHIP start=0x00000000 end=0x00200000 bytes=2097152 confidence=discovered\r\n"
+fault_prefix:    .asciz "FAULT class=MEM test="
+fault_address:   .asciz " address=0x"
+fault_expected:  .asciz " expected=0x"
+fault_actual:    .asciz " actual=0x"
+crlf:            .asciz "\r\n"
+fault_test_data: .asciz "DATA"
+fault_test_address:.asciz "ADDRESS"
+fault_test_arena:.asciz "ARENA"
+fault_test_march:.asciz "MARCH"
 exc_bus:         .asciz "EXCEPTION id=CPU.BUS status=FAIL fatal=1\r\n"
 exc_address:     .asciz "EXCEPTION id=CPU.ADDRESS status=FAIL fatal=1\r\n"
 exc_illegal:     .asciz "EXCEPTION id=CPU.ILLEGAL status=FAIL fatal=1\r\n"
