@@ -4,15 +4,20 @@ import sys
 
 REQUIRED = [
     b"AMIDIAG proto=1 milestone=M3.3 cpu=68000",
-    b"TEST id=CPU.BUS.PROBE status=PASS address=0x00400000 width=16 expected=bus-error",
+    b"TEST id=CPU.BUS.HARDWARE status=PASS address=0x00400000 width=16 source=vector2",
+    b"TEST id=CPU.BUS.HARDWARE status=UNAVAILABLE address=0x00400000 width=16 reason=no-berr",
     b"FRAME id=CPU.BUS ssw=0x",
-    b"TEST id=CPU.BUS.RECOVER status=PASS frame=68000-14-byte return=unwind-jump",
-    b"TEST id=CPU.BASELINE status=PASS cpu=68000 exception=bus",
+    b" source=synthetic",
+    b"TEST id=CPU.BUS.FRAME status=PASS source=synthetic frame=68000-14-byte",
+    b"TEST id=CPU.BUS.RECOVER status=PASS source=synthetic frame=68000-14-byte return=unwind-jump",
+    b"TEST id=CPU.BASELINE status=PASS cpu=68000 exception=bus-frame-handler",
 ]
+
 
 def fail(msg):
     print("FAIL: " + msg, file=sys.stderr)
     raise SystemExit(1)
+
 
 def main():
     if len(sys.argv) != 2:
@@ -26,7 +31,8 @@ def main():
             fail("missing ROM marker: %s" % marker.decode())
     if len(data) != 524288:
         fail("ROM size is %d, expected 524288" % len(data))
-    print("PASS: M3.3 bus-error recovery markers and 512 KiB ROM image")
+    print("PASS: M3.3 separates hardware BERR availability from 68000 frame recovery")
+
 
 if __name__ == "__main__":
     main()
