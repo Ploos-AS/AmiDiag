@@ -4,10 +4,11 @@ import pathlib
 import sys
 
 BASE = [
-    "AMIDIAG proto=1 milestone=M2.2 cpu=68000",
+    "AMIDIAG proto=1 milestone=M2.3 cpu=68000",
     "BOOT phase=reset status=PASS",
     "TEST id=BOOT.VECTORS status=PASS",
     "TEST id=BOOT.SERIAL status=PASS",
+    "TEST id=MEM.DATA status=PASS width=32 patterns=64 mode=preserve",
     "TEST id=MEM.CHIP.DISCOVER status=PASS step=524288 mode=preserve-alias",
 ]
 MAPS = {
@@ -27,16 +28,23 @@ def main():
     p.add_argument("--chip-kib", type=int, choices=sorted(MAPS), default=512)
     a = p.parse_args()
     path = pathlib.Path(a.transcript)
-    if not path.is_file(): fail("transcript not found: %s" % path)
+    if not path.is_file():
+        fail("transcript not found: %s" % path)
     lines = [x.strip() for x in path.read_text(errors="replace").splitlines() if x.strip()]
     pos = 0
     for expected in BASE + [MAPS[a.chip_kib]]:
-        try: idx = lines.index(expected, pos)
-        except ValueError: fail("missing expected record: %s" % expected)
+        try:
+            idx = lines.index(expected, pos)
+        except ValueError:
+            fail("missing expected record: %s" % expected)
         pos = idx + 1
+    failed_tests = [x for x in lines if x.startswith("TEST ") and "status=FAIL" in x]
+    if failed_tests:
+        fail("failed test record present: %s" % failed_tests[0])
     fatal = [x for x in lines if x.startswith("EXCEPTION ") and "status=FAIL" in x]
-    if fatal: fail("fatal exception record present: %s" % fatal[0])
-    print("PASS: M2.2 discovered %d KiB Chip RAM" % a.chip_kib)
+    if fatal:
+        fail("fatal exception record present: %s" % fatal[0])
+    print("PASS: M2.3 data-line test and %d KiB Chip RAM discovery" % a.chip_kib)
 
 if __name__ == "__main__":
     main()
