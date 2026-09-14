@@ -1,0 +1,4 @@
+AMIDIAG proto=1 milestone=M1.2 cpu=68000
+BOOT phase=reset status=PASS
+TEST id=BOOT.VECTORS status=PASS
+TEST id=BOOT.SERIAL status=PASS
