@@ -1,4 +1,4 @@
-/* AmiDiag M2.3 bootstrap - clean-room 68000 Chip RAM diagnostics. */
+/* AmiDiag M2.4 bootstrap - clean-room 68000 Chip RAM diagnostics. */
 
     .equ CIAA_PRA,   0x00BFE001
     .equ SERDATR,    0x00DFF018
@@ -9,6 +9,7 @@
     .equ STACK_TOP,  0x0007FFFC
     .equ PROBE_BASE, 0x00001000
     .equ DATA_TEST_ADDR, 0x00002000
+    .equ ADDR_TEST_BASE, 0x00004000
 
     .section .vectors,"a"
     .globl _rom_vectors
@@ -40,10 +41,26 @@ _rom_reset:
     bne     data_fail
     lea     data_pass,%a0
     bsr     serial_puts
-    bra.s   discover_chip
+    bra.s   test_address
 
 data_fail:
     lea     data_fail_record,%a0
+    bsr     serial_puts
+    bra     halt
+
+    /* M2.4 address-line alias test. Compare ADDR_TEST_BASE against offsets
+       2^2 through 2^18. Each pair is preserved/restored before advancing,
+       so the test stays entirely inside the first qualified 512 KiB bank. */
+test_address:
+    bsr     test_address_lines
+    tst.b   %d1
+    bne     address_fail
+    lea     address_pass,%a0
+    bsr     serial_puts
+    bra.s   discover_chip
+
+address_fail:
+    lea     address_fail_record,%a0
     bsr     serial_puts
     bra     halt
 
@@ -126,6 +143,42 @@ data_test_failed:
     moveq   #1,%d1
 data_test_restore:
     move.l  %d4,(%a3)
+    rts
+
+/* d1 = 0 PASS, 1 FAIL. Address bits A2..A18 are exercised. For each
+   candidate the original base and candidate longwords are restored. */
+test_address_lines:
+    move.l  #ADDR_TEST_BASE,%a2
+    moveq   #4,%d0
+    moveq   #16,%d5
+address_loop:
+    move.l  %a2,%a1
+    adda.l  %d0,%a1
+    move.l  (%a2),%d2
+    move.l  (%a1),%d3
+    moveq   #1,%d1
+
+    move.l  #0x55AA33CC,(%a2)
+    cmp.l   #0x55AA33CC,(%a2)
+    bne.s   address_restore
+
+    move.l  #0xAA55CC33,(%a1)
+    cmp.l   #0xAA55CC33,(%a1)
+    bne.s   address_restore
+
+    /* If this address bit aliases or is stuck, candidate write changes base. */
+    cmp.l   #0x55AA33CC,(%a2)
+    bne.s   address_restore
+
+    moveq   #0,%d1
+address_restore:
+    move.l  %d3,(%a1)
+    move.l  %d2,(%a2)
+    tst.b   %d1
+    bne.s   address_done
+    lsl.l   #1,%d0
+    dbra    %d5,address_loop
+address_done:
     rts
 
 /* a1 = candidate at same +0x1000 offset in a later 512 KiB bank.
@@ -227,25 +280,27 @@ serial_wait_tbe:
     rts
 
     .section .rodata,"a"
-banner:         .asciz "AMIDIAG proto=1 milestone=M2.3 cpu=68000\r\n"
-boot_record:    .asciz "BOOT phase=reset status=PASS\r\n"
-vector_record:  .asciz "TEST id=BOOT.VECTORS status=PASS\r\n"
-serial_record:  .asciz "TEST id=BOOT.SERIAL status=PASS\r\n"
-data_pass:      .asciz "TEST id=MEM.DATA status=PASS width=32 patterns=64 mode=preserve\r\n"
+banner:          .asciz "AMIDIAG proto=1 milestone=M2.4 cpu=68000\r\n"
+boot_record:     .asciz "BOOT phase=reset status=PASS\r\n"
+vector_record:   .asciz "TEST id=BOOT.VECTORS status=PASS\r\n"
+serial_record:   .asciz "TEST id=BOOT.SERIAL status=PASS\r\n"
+data_pass:       .asciz "TEST id=MEM.DATA status=PASS width=32 patterns=64 mode=preserve\r\n"
 data_fail_record:.asciz "TEST id=MEM.DATA status=FAIL width=32 mode=preserve\r\n"
-discover_pass:  .asciz "TEST id=MEM.CHIP.DISCOVER status=PASS step=524288 mode=preserve-alias\r\n"
-map_512k:       .asciz "MEM region=CHIP start=0x00000000 end=0x00080000 bytes=524288 confidence=discovered\r\n"
-map_1m:         .asciz "MEM region=CHIP start=0x00000000 end=0x00100000 bytes=1048576 confidence=discovered\r\n"
-map_1536k:      .asciz "MEM region=CHIP start=0x00000000 end=0x00180000 bytes=1572864 confidence=discovered\r\n"
-map_2m:         .asciz "MEM region=CHIP start=0x00000000 end=0x00200000 bytes=2097152 confidence=discovered\r\n"
-exc_bus:        .asciz "EXCEPTION id=CPU.BUS status=FAIL fatal=1\r\n"
-exc_address:    .asciz "EXCEPTION id=CPU.ADDRESS status=FAIL fatal=1\r\n"
-exc_illegal:    .asciz "EXCEPTION id=CPU.ILLEGAL status=FAIL fatal=1\r\n"
-exc_zero_divide:.asciz "EXCEPTION id=CPU.DIVZERO status=FAIL fatal=1\r\n"
-exc_chk:        .asciz "EXCEPTION id=CPU.CHK status=FAIL fatal=1\r\n"
-exc_trapv:      .asciz "EXCEPTION id=CPU.TRAPV status=FAIL fatal=1\r\n"
-exc_privilege:  .asciz "EXCEPTION id=CPU.PRIV status=FAIL fatal=1\r\n"
-exc_trace:      .asciz "EXCEPTION id=CPU.TRACE status=FAIL fatal=1\r\n"
-exc_line_a:     .asciz "EXCEPTION id=CPU.LINEA status=FAIL fatal=1\r\n"
-exc_line_f:     .asciz "EXCEPTION id=CPU.LINEF status=FAIL fatal=1\r\n"
-exc_default:    .asciz "EXCEPTION id=CPU.UNKNOWN status=FAIL fatal=1\r\n"
+address_pass:    .asciz "TEST id=MEM.ADDRESS status=PASS bits=A2-A18 probes=17 mode=preserve-alias\r\n"
+address_fail_record:.asciz "TEST id=MEM.ADDRESS status=FAIL bits=A2-A18 mode=preserve-alias\r\n"
+discover_pass:   .asciz "TEST id=MEM.CHIP.DISCOVER status=PASS step=524288 mode=preserve-alias\r\n"
+map_512k:        .asciz "MEM region=CHIP start=0x00000000 end=0x00080000 bytes=524288 confidence=discovered\r\n"
+map_1m:          .asciz "MEM region=CHIP start=0x00000000 end=0x00100000 bytes=1048576 confidence=discovered\r\n"
+map_1536k:       .asciz "MEM region=CHIP start=0x00000000 end=0x00180000 bytes=1572864 confidence=discovered\r\n"
+map_2m:          .asciz "MEM region=CHIP start=0x00000000 end=0x00200000 bytes=2097152 confidence=discovered\r\n"
+exc_bus:         .asciz "EXCEPTION id=CPU.BUS status=FAIL fatal=1\r\n"
+exc_address:     .asciz "EXCEPTION id=CPU.ADDRESS status=FAIL fatal=1\r\n"
+exc_illegal:     .asciz "EXCEPTION id=CPU.ILLEGAL status=FAIL fatal=1\r\n"
+exc_zero_divide: .asciz "EXCEPTION id=CPU.DIVZERO status=FAIL fatal=1\r\n"
+exc_chk:         .asciz "EXCEPTION id=CPU.CHK status=FAIL fatal=1\r\n"
+exc_trapv:       .asciz "EXCEPTION id=CPU.TRAPV status=FAIL fatal=1\r\n"
+exc_privilege:   .asciz "EXCEPTION id=CPU.PRIV status=FAIL fatal=1\r\n"
+exc_trace:       .asciz "EXCEPTION id=CPU.TRACE status=FAIL fatal=1\r\n"
+exc_line_a:      .asciz "EXCEPTION id=CPU.LINEA status=FAIL fatal=1\r\n"
+exc_line_f:      .asciz "EXCEPTION id=CPU.LINEF status=FAIL fatal=1\r\n"
+exc_default:     .asciz "EXCEPTION id=CPU.UNKNOWN status=FAIL fatal=1\r\n"
