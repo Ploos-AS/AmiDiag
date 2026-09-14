@@ -1,4 +1,4 @@
-/* AmiDiag M2.4 bootstrap - clean-room 68000 Chip RAM diagnostics. */
+/* AmiDiag M2.5 bootstrap - clean-room 68000 Chip RAM diagnostics. */
 
     .equ CIAA_PRA,   0x00BFE001
     .equ SERDATR,    0x00DFF018
@@ -10,6 +10,8 @@
     .equ PROBE_BASE, 0x00001000
     .equ DATA_TEST_ADDR, 0x00002000
     .equ ADDR_TEST_BASE, 0x00004000
+    .equ ARENA_BASE, 0x00006000
+    .equ ARENA_LONGS, 1024
 
     .section .vectors,"a"
     .globl _rom_vectors
@@ -34,8 +36,6 @@ _rom_reset:
     lea     serial_record,%a0
     bsr     serial_puts
 
-    /* M2.3 data-line test. Preserve the original longword, test walking 1
-       and walking 0 across all 32 data bits, then restore on every path. */
     bsr     test_data_lines
     tst.b   %d1
     bne     data_fail
@@ -48,25 +48,35 @@ data_fail:
     bsr     serial_puts
     bra     halt
 
-    /* M2.4 address-line alias test. Compare ADDR_TEST_BASE against offsets
-       2^2 through 2^18. Each pair is preserved/restored before advancing,
-       so the test stays entirely inside the first qualified 512 KiB bank. */
 test_address:
     bsr     test_address_lines
     tst.b   %d1
     bne     address_fail
     lea     address_pass,%a0
     bsr     serial_puts
-    bra.s   discover_chip
+    bra.s   test_arena
 
 address_fail:
     lea     address_fail_record,%a0
     bsr     serial_puts
     bra     halt
 
+/* M2.5 controlled 4 KiB arena test. Every longword is preserved, tested
+   against four deterministic patterns, and restored before moving on. */
+test_arena:
+    bsr     test_arena_patterns
+    tst.b   %d1
+    bne     arena_fail
+    lea     arena_pass,%a0
+    bsr     serial_puts
+    bra.s   discover_chip
+
+arena_fail:
+    lea     arena_fail_record,%a0
+    bsr     serial_puts
+    bra     halt
+
 discover_chip:
-    /* M2.2-compatible matching-offset discovery in successive 512 KiB
-       banks. The base and candidate locations are preserved and restored. */
     lea     0x00081000,%a1
     bsr     probe_bank_distinct
     tst.b   %d1
@@ -110,13 +120,10 @@ halt:
     stop    #0x2700
     bra.s   halt
 
-/* d1 = 0 PASS, 1 FAIL. Original longword is always restored. */
 test_data_lines:
     move.l  #DATA_TEST_ADDR,%a3
     move.l  (%a3),%d4
     moveq   #0,%d1
-
-    /* walking 1 */
     moveq   #1,%d0
     moveq   #31,%d5
 walk_one_loop:
@@ -125,8 +132,6 @@ walk_one_loop:
     bne.s   data_test_failed
     lsl.l   #1,%d0
     dbra    %d5,walk_one_loop
-
-    /* walking 0 */
     moveq   #1,%d0
     moveq   #31,%d5
 walk_zero_loop:
@@ -145,8 +150,6 @@ data_test_restore:
     move.l  %d4,(%a3)
     rts
 
-/* d1 = 0 PASS, 1 FAIL. Address bits A2..A18 are exercised. For each
-   candidate the original base and candidate longwords are restored. */
 test_address_lines:
     move.l  #ADDR_TEST_BASE,%a2
     moveq   #4,%d0
@@ -157,19 +160,14 @@ address_loop:
     move.l  (%a2),%d2
     move.l  (%a1),%d3
     moveq   #1,%d1
-
     move.l  #0x55AA33CC,(%a2)
     cmp.l   #0x55AA33CC,(%a2)
     bne.s   address_restore
-
     move.l  #0xAA55CC33,(%a1)
     cmp.l   #0xAA55CC33,(%a1)
     bne.s   address_restore
-
-    /* If this address bit aliases or is stuck, candidate write changes base. */
     cmp.l   #0x55AA33CC,(%a2)
     bne.s   address_restore
-
     moveq   #0,%d1
 address_restore:
     move.l  %d3,(%a1)
@@ -181,25 +179,57 @@ address_restore:
 address_done:
     rts
 
-/* a1 = candidate at same +0x1000 offset in a later 512 KiB bank.
-   d1 = 0 when distinct writable RAM exists, 1 when absent or aliased. */
+/* d1 = 0 PASS, 1 FAIL. 1024 longwords = 4096 bytes. */
+test_arena_patterns:
+    move.l  #ARENA_BASE,%a3
+    move.w  #ARENA_LONGS-1,%d5
+    moveq   #0,%d1
+arena_loop:
+    move.l  (%a3),%d4
+    move.l  #0x00000000,%d6
+    bsr.s   arena_try_pattern
+    tst.b   %d1
+    bne.s   arena_restore_fail
+    move.l  #0xFFFFFFFF,%d6
+    bsr.s   arena_try_pattern
+    tst.b   %d1
+    bne.s   arena_restore_fail
+    move.l  #0xAAAAAAAA,%d6
+    bsr.s   arena_try_pattern
+    tst.b   %d1
+    bne.s   arena_restore_fail
+    move.l  #0x55555555,%d6
+    bsr.s   arena_try_pattern
+    tst.b   %d1
+    bne.s   arena_restore_fail
+    move.l  %d4,(%a3)
+    addq.l  #4,%a3
+    dbra    %d5,arena_loop
+    rts
+arena_restore_fail:
+    move.l  %d4,(%a3)
+    rts
+arena_try_pattern:
+    move.l  %d6,(%a3)
+    cmp.l   (%a3),%d6
+    beq.s   arena_pattern_ok
+    moveq   #1,%d1
+arena_pattern_ok:
+    rts
+
 probe_bank_distinct:
     move.l  #PROBE_BASE,%a2
     move.l  (%a2),%d2
     move.l  (%a1),%d3
     moveq   #1,%d1
-
     move.l  #0x13579BDF,(%a2)
     cmp.l   #0x13579BDF,(%a2)
     bne.s   probe_restore
-
     move.l  #0x2468ACE0,(%a1)
     cmp.l   #0x2468ACE0,(%a1)
     bne.s   probe_restore
-
     cmp.l   #0x13579BDF,(%a2)
     bne.s   probe_restore
-
     moveq   #0,%d1
 probe_restore:
     move.l  %d3,(%a1)
@@ -225,38 +255,17 @@ install_ram_vectors:
     move.l  #_exception_line_f,44
     rts
 
-_exception_bus:
-    lea     exc_bus,%a0
-    bra.s   exception_fatal
-_exception_address:
-    lea     exc_address,%a0
-    bra.s   exception_fatal
-_exception_illegal:
-    lea     exc_illegal,%a0
-    bra.s   exception_fatal
-_exception_zero_divide:
-    lea     exc_zero_divide,%a0
-    bra.s   exception_fatal
-_exception_chk:
-    lea     exc_chk,%a0
-    bra.s   exception_fatal
-_exception_trapv:
-    lea     exc_trapv,%a0
-    bra.s   exception_fatal
-_exception_privilege:
-    lea     exc_privilege,%a0
-    bra.s   exception_fatal
-_exception_trace:
-    lea     exc_trace,%a0
-    bra.s   exception_fatal
-_exception_line_a:
-    lea     exc_line_a,%a0
-    bra.s   exception_fatal
-_exception_line_f:
-    lea     exc_line_f,%a0
-    bra.s   exception_fatal
-_exception_default:
-    lea     exc_default,%a0
+_exception_bus:          lea exc_bus,%a0; bra.s exception_fatal
+_exception_address:      lea exc_address,%a0; bra.s exception_fatal
+_exception_illegal:      lea exc_illegal,%a0; bra.s exception_fatal
+_exception_zero_divide:  lea exc_zero_divide,%a0; bra.s exception_fatal
+_exception_chk:          lea exc_chk,%a0; bra.s exception_fatal
+_exception_trapv:        lea exc_trapv,%a0; bra.s exception_fatal
+_exception_privilege:    lea exc_privilege,%a0; bra.s exception_fatal
+_exception_trace:        lea exc_trace,%a0; bra.s exception_fatal
+_exception_line_a:       lea exc_line_a,%a0; bra.s exception_fatal
+_exception_line_f:       lea exc_line_f,%a0; bra.s exception_fatal
+_exception_default:      lea exc_default,%a0
 exception_fatal:
     bsr     serial_puts
 exception_halt:
@@ -280,7 +289,7 @@ serial_wait_tbe:
     rts
 
     .section .rodata,"a"
-banner:          .asciz "AMIDIAG proto=1 milestone=M2.4 cpu=68000\r\n"
+banner:          .asciz "AMIDIAG proto=1 milestone=M2.5 cpu=68000\r\n"
 boot_record:     .asciz "BOOT phase=reset status=PASS\r\n"
 vector_record:   .asciz "TEST id=BOOT.VECTORS status=PASS\r\n"
 serial_record:   .asciz "TEST id=BOOT.SERIAL status=PASS\r\n"
@@ -288,6 +297,8 @@ data_pass:       .asciz "TEST id=MEM.DATA status=PASS width=32 patterns=64 mode=
 data_fail_record:.asciz "TEST id=MEM.DATA status=FAIL width=32 mode=preserve\r\n"
 address_pass:    .asciz "TEST id=MEM.ADDRESS status=PASS bits=A2-A18 probes=17 mode=preserve-alias\r\n"
 address_fail_record:.asciz "TEST id=MEM.ADDRESS status=FAIL bits=A2-A18 mode=preserve-alias\r\n"
+arena_pass:      .asciz "TEST id=MEM.ARENA status=PASS start=0x00006000 bytes=4096 cells=1024 patterns=4 mode=preserve\r\n"
+arena_fail_record:.asciz "TEST id=MEM.ARENA status=FAIL start=0x00006000 bytes=4096 mode=preserve\r\n"
 discover_pass:   .asciz "TEST id=MEM.CHIP.DISCOVER status=PASS step=524288 mode=preserve-alias\r\n"
 map_512k:        .asciz "MEM region=CHIP start=0x00000000 end=0x00080000 bytes=524288 confidence=discovered\r\n"
 map_1m:          .asciz "MEM region=CHIP start=0x00000000 end=0x00100000 bytes=1048576 confidence=discovered\r\n"
