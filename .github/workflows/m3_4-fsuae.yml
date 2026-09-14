@@ -1,9 +1,8 @@
-name: M3.4 FS-UAE qualification
+name: M3.4 FS-UAE qualification (frozen)
 
+# Historical qualification: run 34894964557 passed at
+# b3d6c920c9c84c826f3f4372e86f58f34decb532.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,6 +17,8 @@ jobs:
       FS_UAE: xvfb-run -a fs-uae
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: b3d6c920c9c84c826f3f4372e86f58f34decb532
 
       - name: Install 68000 toolchain and FS-UAE
         run: |
