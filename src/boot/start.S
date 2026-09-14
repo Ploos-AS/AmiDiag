@@ -1,4 +1,4 @@
-/* AmiDiag M2.2 bootstrap - clean-room 68000 Chip RAM discovery. */
+/* AmiDiag M2.3 bootstrap - clean-room 68000 Chip RAM diagnostics. */
 
     .equ CIAA_PRA,   0x00BFE001
     .equ SERDATR,    0x00DFF018
@@ -8,6 +8,7 @@
     .equ SERPER_9600_PAL, 369
     .equ STACK_TOP,  0x0007FFFC
     .equ PROBE_BASE, 0x00001000
+    .equ DATA_TEST_ADDR, 0x00002000
 
     .section .vectors,"a"
     .globl _rom_vectors
@@ -32,9 +33,23 @@ _rom_reset:
     lea     serial_record,%a0
     bsr     serial_puts
 
-    /* M2.2 tests matching offsets in successive 512 KiB banks. Each probe
-       preserves both the base word and candidate word, writes distinct
-       patterns, detects aliasing, then restores both locations. */
+    /* M2.3 data-line test. Preserve the original longword, test walking 1
+       and walking 0 across all 32 data bits, then restore on every path. */
+    bsr     test_data_lines
+    tst.b   %d1
+    bne     data_fail
+    lea     data_pass,%a0
+    bsr     serial_puts
+    bra.s   discover_chip
+
+data_fail:
+    lea     data_fail_record,%a0
+    bsr     serial_puts
+    bra     halt
+
+discover_chip:
+    /* M2.2-compatible matching-offset discovery in successive 512 KiB
+       banks. The base and candidate locations are preserved and restored. */
     lea     0x00081000,%a1
     bsr     probe_bank_distinct
     tst.b   %d1
@@ -78,6 +93,41 @@ halt:
     stop    #0x2700
     bra.s   halt
 
+/* d1 = 0 PASS, 1 FAIL. Original longword is always restored. */
+test_data_lines:
+    move.l  #DATA_TEST_ADDR,%a3
+    move.l  (%a3),%d4
+    moveq   #0,%d1
+
+    /* walking 1 */
+    moveq   #1,%d0
+    moveq   #31,%d5
+walk_one_loop:
+    move.l  %d0,(%a3)
+    cmp.l   (%a3),%d0
+    bne.s   data_test_failed
+    lsl.l   #1,%d0
+    dbra    %d5,walk_one_loop
+
+    /* walking 0 */
+    moveq   #1,%d0
+    moveq   #31,%d5
+walk_zero_loop:
+    move.l  %d0,%d6
+    not.l   %d6
+    move.l  %d6,(%a3)
+    cmp.l   (%a3),%d6
+    bne.s   data_test_failed
+    lsl.l   #1,%d0
+    dbra    %d5,walk_zero_loop
+    bra.s   data_test_restore
+
+data_test_failed:
+    moveq   #1,%d1
+data_test_restore:
+    move.l  %d4,(%a3)
+    rts
+
 /* a1 = candidate at same +0x1000 offset in a later 512 KiB bank.
    d1 = 0 when distinct writable RAM exists, 1 when absent or aliased. */
 probe_bank_distinct:
@@ -94,7 +144,6 @@ probe_bank_distinct:
     cmp.l   #0x2468ACE0,(%a1)
     bne.s   probe_restore
 
-    /* If the candidate aliases the base bank, its write changed PROBE_BASE. */
     cmp.l   #0x13579BDF,(%a2)
     bne.s   probe_restore
 
@@ -123,17 +172,38 @@ install_ram_vectors:
     move.l  #_exception_line_f,44
     rts
 
-_exception_bus:          lea exc_bus,%a0; bra.s exception_fatal
-_exception_address:      lea exc_address,%a0; bra.s exception_fatal
-_exception_illegal:      lea exc_illegal,%a0; bra.s exception_fatal
-_exception_zero_divide:  lea exc_zero_divide,%a0; bra.s exception_fatal
-_exception_chk:          lea exc_chk,%a0; bra.s exception_fatal
-_exception_trapv:        lea exc_trapv,%a0; bra.s exception_fatal
-_exception_privilege:    lea exc_privilege,%a0; bra.s exception_fatal
-_exception_trace:        lea exc_trace,%a0; bra.s exception_fatal
-_exception_line_a:       lea exc_line_a,%a0; bra.s exception_fatal
-_exception_line_f:       lea exc_line_f,%a0; bra.s exception_fatal
-_exception_default:      lea exc_default,%a0
+_exception_bus:
+    lea     exc_bus,%a0
+    bra.s   exception_fatal
+_exception_address:
+    lea     exc_address,%a0
+    bra.s   exception_fatal
+_exception_illegal:
+    lea     exc_illegal,%a0
+    bra.s   exception_fatal
+_exception_zero_divide:
+    lea     exc_zero_divide,%a0
+    bra.s   exception_fatal
+_exception_chk:
+    lea     exc_chk,%a0
+    bra.s   exception_fatal
+_exception_trapv:
+    lea     exc_trapv,%a0
+    bra.s   exception_fatal
+_exception_privilege:
+    lea     exc_privilege,%a0
+    bra.s   exception_fatal
+_exception_trace:
+    lea     exc_trace,%a0
+    bra.s   exception_fatal
+_exception_line_a:
+    lea     exc_line_a,%a0
+    bra.s   exception_fatal
+_exception_line_f:
+    lea     exc_line_f,%a0
+    bra.s   exception_fatal
+_exception_default:
+    lea     exc_default,%a0
 exception_fatal:
     bsr     serial_puts
 exception_halt:
@@ -157,10 +227,12 @@ serial_wait_tbe:
     rts
 
     .section .rodata,"a"
-banner:         .asciz "AMIDIAG proto=1 milestone=M2.2 cpu=68000\r\n"
+banner:         .asciz "AMIDIAG proto=1 milestone=M2.3 cpu=68000\r\n"
 boot_record:    .asciz "BOOT phase=reset status=PASS\r\n"
 vector_record:  .asciz "TEST id=BOOT.VECTORS status=PASS\r\n"
 serial_record:  .asciz "TEST id=BOOT.SERIAL status=PASS\r\n"
+data_pass:      .asciz "TEST id=MEM.DATA status=PASS width=32 patterns=64 mode=preserve\r\n"
+data_fail_record:.asciz "TEST id=MEM.DATA status=FAIL width=32 mode=preserve\r\n"
 discover_pass:  .asciz "TEST id=MEM.CHIP.DISCOVER status=PASS step=524288 mode=preserve-alias\r\n"
 map_512k:       .asciz "MEM region=CHIP start=0x00000000 end=0x00080000 bytes=524288 confidence=discovered\r\n"
 map_1m:         .asciz "MEM region=CHIP start=0x00000000 end=0x00100000 bytes=1048576 confidence=discovered\r\n"
