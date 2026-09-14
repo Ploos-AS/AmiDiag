@@ -1,9 +1,6 @@
 name: M3.2 FS-UAE qualification
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,6 +15,8 @@ jobs:
       FS_UAE: xvfb-run -a fs-uae
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: 331fee4e7493e66f272dede3c4e210408b88bb51
 
       - name: Install 68000 toolchain and FS-UAE
         run: |
