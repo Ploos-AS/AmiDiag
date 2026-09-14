@@ -7,10 +7,13 @@ ROM_BASE = 0x00F80000
 ROM_SIZE = 512 * 1024
 CHIP_RAM_MAX = 0x00200000
 REQUIRED_MARKERS = (
-    b"AMIDIAG proto=1 milestone=M2.2",
+    b"AMIDIAG proto=1 milestone=M2.3",
     b"BOOT phase=reset",
     b"BOOT.VECTORS",
     b"BOOT.SERIAL",
+    b"MEM.DATA",
+    b"patterns=64",
+    b"mode=preserve",
     b"MEM.CHIP.DISCOVER",
     b"mode=preserve-alias",
     b"confidence=discovered",
@@ -28,15 +31,20 @@ def fail(message):
     raise SystemExit(1)
 
 def main():
-    if len(sys.argv) != 2: fail("usage: check_rom.py <amidiag.rom>")
+    if len(sys.argv) != 2:
+        fail("usage: check_rom.py <amidiag.rom>")
     data = pathlib.Path(sys.argv[1]).read_bytes()
-    if len(data) != ROM_SIZE: fail("ROM size is %d, expected %d" % (len(data), ROM_SIZE))
+    if len(data) != ROM_SIZE:
+        fail("ROM size is %d, expected %d" % (len(data), ROM_SIZE))
     initial_sp, reset_pc = struct.unpack_from(">II", data, 0)
-    if initial_sp == 0 or initial_sp > CHIP_RAM_MAX or (initial_sp & 1): fail("implausible initial SP")
-    if not (ROM_BASE <= reset_pc < ROM_BASE + ROM_SIZE) or (reset_pc & 1): fail("reset PC outside ROM")
+    if initial_sp == 0 or initial_sp > CHIP_RAM_MAX or (initial_sp & 1):
+        fail("implausible initial SP")
+    if not (ROM_BASE <= reset_pc < ROM_BASE + ROM_SIZE) or (reset_pc & 1):
+        fail("reset PC outside ROM")
     for marker in REQUIRED_MARKERS:
-        if marker not in data: fail("missing marker %r" % (marker,))
-    print("PASS: M2.2 ROM size/vectors/discovery markers")
+        if marker not in data:
+            fail("missing marker %r" % (marker,))
+    print("PASS: M2.3 ROM size/vectors/data-test/discovery markers")
 
 if __name__ == "__main__":
     main()
