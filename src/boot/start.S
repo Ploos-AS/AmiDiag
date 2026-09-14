@@ -1,4 +1,4 @@
-/* AmiDiag M1.1 bootstrap - clean-room implementation for a 68000-safe baseline. */
+/* AmiDiag M1.2 bootstrap - clean-room implementation for a 68000-safe baseline. */
 
     .equ CIAA_PRA,   0x00BFE001
     .equ SERDATR,    0x00DFF018
@@ -39,6 +39,13 @@ _rom_reset:
     bsr     serial_puts
     lea     test_record,%a0
     bsr     serial_puts
+
+#ifdef AMIDIAG_TEST_ILLEGAL
+    /* Qualification-only build: prove that the installed vector table and
+       fatal exception reporter are actually executable. 0x4AFC is ILLEGAL
+       on the 68000 and must enter vector 4. */
+    .word   0x4AFC
+#endif
 
 halt:
     stop    #0x2700
@@ -98,8 +105,8 @@ _exception_default:
     lea     exc_default,%a0
 
 exception_fatal:
-    /* A fatal exception is intentionally terminal in M1.1. Later milestones
-       may decode the 68000 exception frame and continue where it is safe. */
+    /* Fatal exceptions are terminal in M1.2. Later milestones may decode
+       exception frames and continue where doing so is demonstrably safe. */
     bsr     serial_puts
 exception_halt:
     stop    #0x2700
@@ -124,7 +131,7 @@ serial_wait_tbe:
 
     .section .rodata,"a"
 banner:
-    .asciz "AMIDIAG proto=1 milestone=M1.1 cpu=68000\r\n"
+    .asciz "AMIDIAG proto=1 milestone=M1.2 cpu=68000\r\n"
 boot_record:
     .asciz "BOOT phase=reset status=PASS\r\n"
 vector_record:
