@@ -8,7 +8,7 @@ ROM_SIZE = 512 * 1024
 CHIP_RAM_MAX = 0x00200000
 
 REQUIRED_MARKERS = (
-    b"AMIDIAG proto=1 milestone=M1.1",
+    b"AMIDIAG proto=1 milestone=M1.2",
     b"BOOT phase=reset",
     b"BOOT.VECTORS",
     b"BOOT.SERIAL",
