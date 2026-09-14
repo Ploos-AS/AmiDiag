@@ -1,9 +1,6 @@
-name: M3.1 FS-UAE qualification
+name: M3.1 FS-UAE qualification (frozen)
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,6 +15,11 @@ jobs:
       FS_UAE: xvfb-run -a fs-uae
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: c217eec7b0f54080b9eef178f2790680cb67032f
+
+      - name: Historical qualification notice
+        run: echo "Replaying M3.1 qualified tree from successful run 34880983606"
 
       - name: Install 68000 toolchain and FS-UAE
         run: |
