@@ -1,0 +1,66 @@
+name: M1.2 FS-UAE qualification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-m1-2:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CROSS: m68k-linux-gnu-
+      FS_UAE: xvfb-run -a fs-uae
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install 68000 toolchain and FS-UAE
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-m68k-linux-gnu \
+            binutils-m68k-linux-gnu \
+            fs-uae \
+            xvfb \
+            python3
+
+      - name: Record tool versions
+        run: |
+          mkdir -p build/evidence
+          m68k-linux-gnu-gcc --version | head -n1 | tee build/evidence/toolchain.txt
+          fs-uae --version 2>&1 | tee build/evidence/fs-uae-version.txt
+          python3 --version | tee build/evidence/python-version.txt
+
+      - name: Qualify M1.2
+        run: make clean qualify-m1_2
+
+      - name: Record ROM hashes
+        if: always()
+        run: |
+          mkdir -p build/evidence
+          sha256sum build/amidiag.rom build/amidiag-exception.rom \
+            > build/evidence/rom-sha256.txt 2>/dev/null || true
+
+      - name: Upload M1.2 qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: amidiag-m1_2-qualification
+          path: |
+            build/amidiag.rom
+            build/amidiag-exception.rom
+            build/amidiag.map
+            build/amidiag-exception.map
+            build/m1_2-fsuae-serial.txt
+            build/m1_2-fsuae-exception-serial.txt
+            build/m1_2-fsuae.log
+            build/m1_2-fsuae-exception.log
+            build/m1_2.fs-uae
+            build/m1_2-exception.fs-uae
+            build/evidence/
+          if-no-files-found: warn
