@@ -104,7 +104,7 @@ probe_chip_candidate:
     moveq   #EXPECT_BUS,%d0
     bsr     guarded_read16
     cmpi.b  #RESULT_BUS_ERROR,PROBE_RESULT
-    beq.s   candidate_bus_error
+    beq     candidate_bus_error
     move.w  PROBE_VALUE,%d5
 
     move.w  #BASE_PATTERN,BASE_ADDR
@@ -114,20 +114,20 @@ probe_chip_candidate:
     moveq   #EXPECT_BUS,%d0
     bsr     guarded_write16
     cmpi.b  #RESULT_BUS_ERROR,PROBE_RESULT
-    beq.s   candidate_bus_after_base
+    beq     candidate_bus_after_base
 
     move.l  #CANDIDATE_ADDR,%a0
     moveq   #EXPECT_BUS,%d0
     bsr     guarded_read16
     cmpi.b  #RESULT_BUS_ERROR,PROBE_RESULT
-    beq.s   candidate_bus_after_base
+    beq     candidate_bus_after_base
     move.w  PROBE_VALUE,%d6
     move.w  BASE_ADDR,%d7
 
     cmpi.w  #CAND_PATTERN,%d6
-    bne.s   candidate_open_bus
+    bne     candidate_open_bus
     cmpi.w  #BASE_PATTERN,%d7
-    bne.s   candidate_alias
+    bne     candidate_alias
 
     /* Independent RAM. */
     move.l  #CANDIDATE_ADDR,%a0
