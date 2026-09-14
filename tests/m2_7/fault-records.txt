@@ -1,0 +1,4 @@
+FAULT class=MEM test=DATA address=0x00002000 expected=0x80000000 actual=0x00000000
+FAULT class=MEM test=ADDRESS address=0x00004010 expected=0xAA55CC33 actual=0xAA55CC31
+FAULT class=MEM test=ARENA address=0x00006020 expected=0xAAAAAAAA actual=0xAAAAAA8A
+FAULT class=MEM test=MARCH address=0x00006FF8 expected=0xFFFFFFFF actual=0xFFFFFFFE
