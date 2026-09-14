@@ -1,9 +1,6 @@
 name: M2.5 FS-UAE qualification
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,13 +15,15 @@ jobs:
       FS_UAE: xvfb-run -a fs-uae
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: 944fb25e6b4fffa267e7ea75007a9443be672cf8
 
       - name: Install 68000 toolchain and FS-UAE
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu fs-uae xvfb python3
 
-      - name: Qualify M2.5
+      - name: Qualify frozen M2.5
         run: make clean qualify-m2_5
 
       - name: Record qualification evidence
