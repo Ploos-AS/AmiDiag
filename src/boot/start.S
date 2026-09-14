@@ -1,4 +1,4 @@
-/* AmiDiag M2.5 bootstrap - clean-room 68000 Chip RAM diagnostics. */
+/* AmiDiag M2.6 bootstrap - clean-room 68000 Chip RAM diagnostics. */
 
     .equ CIAA_PRA,   0x00BFE001
     .equ SERDATR,    0x00DFF018
@@ -12,6 +12,7 @@
     .equ ADDR_TEST_BASE, 0x00004000
     .equ ARENA_BASE, 0x00006000
     .equ ARENA_LONGS, 1024
+    .equ MARCH_PAIRS, 512
 
     .section .vectors,"a"
     .globl _rom_vectors
@@ -61,18 +62,33 @@ address_fail:
     bsr     serial_puts
     bra     halt
 
-/* M2.5 controlled 4 KiB arena test. Every longword is preserved, tested
-   against four deterministic patterns, and restored before moving on. */
 test_arena:
     bsr     test_arena_patterns
     tst.b   %d1
     bne     arena_fail
     lea     arena_pass,%a0
     bsr     serial_puts
-    bra.s   discover_chip
+    bra.s   test_march
 
 arena_fail:
     lea     arena_fail_record,%a0
+    bsr     serial_puts
+    bra     halt
+
+/* M2.6 paired March C- test. Two adjacent longwords are preserved in
+   registers, exercised in ascending and descending order, then restored.
+   This adds local coupling/transition coverage without a destructive
+   shadow buffer elsewhere in Chip RAM. */
+test_march:
+    bsr     test_paired_march_c_minus
+    tst.b   %d1
+    bne     march_fail
+    lea     march_pass,%a0
+    bsr     serial_puts
+    bra.s   discover_chip
+
+march_fail:
+    lea     march_fail_record,%a0
     bsr     serial_puts
     bra     halt
 
@@ -179,7 +195,6 @@ address_restore:
 address_done:
     rts
 
-/* d1 = 0 PASS, 1 FAIL. 1024 longwords = 4096 bytes. */
 test_arena_patterns:
     move.l  #ARENA_BASE,%a3
     move.w  #ARENA_LONGS-1,%d5
@@ -215,6 +230,69 @@ arena_try_pattern:
     beq.s   arena_pattern_ok
     moveq   #1,%d1
 arena_pattern_ok:
+    rts
+
+/* d1 = 0 PASS, 1 FAIL. Each pair is restored on all paths.
+   Per pair sequence approximates March C- locally:
+   w0 both; ascending r0,w1,r1,w0; descending r0,w1,r1,w0; final r0. */
+test_paired_march_c_minus:
+    move.l  #ARENA_BASE,%a3
+    move.w  #MARCH_PAIRS-1,%d5
+    moveq   #0,%d1
+march_pair_loop:
+    move.l  (%a3),%d4
+    move.l  4(%a3),%d7
+
+    moveq   #0,%d0
+    move.l  %d0,(%a3)
+    move.l  %d0,4(%a3)
+
+    /* ascending: lower then upper */
+    cmp.l   (%a3),%d0
+    bne.s   march_pair_fail
+    moveq   #-1,%d6
+    move.l  %d6,(%a3)
+    cmp.l   (%a3),%d6
+    bne.s   march_pair_fail
+    move.l  %d0,(%a3)
+
+    cmp.l   4(%a3),%d0
+    bne.s   march_pair_fail
+    move.l  %d6,4(%a3)
+    cmp.l   4(%a3),%d6
+    bne.s   march_pair_fail
+    move.l  %d0,4(%a3)
+
+    /* descending: upper then lower */
+    cmp.l   4(%a3),%d0
+    bne.s   march_pair_fail
+    move.l  %d6,4(%a3)
+    cmp.l   4(%a3),%d6
+    bne.s   march_pair_fail
+    move.l  %d0,4(%a3)
+
+    cmp.l   (%a3),%d0
+    bne.s   march_pair_fail
+    move.l  %d6,(%a3)
+    cmp.l   (%a3),%d6
+    bne.s   march_pair_fail
+    move.l  %d0,(%a3)
+
+    cmp.l   (%a3),%d0
+    bne.s   march_pair_fail
+    cmp.l   4(%a3),%d0
+    bne.s   march_pair_fail
+
+    move.l  %d4,(%a3)
+    move.l  %d7,4(%a3)
+    addq.l  #8,%a3
+    dbra    %d5,march_pair_loop
+    rts
+
+march_pair_fail:
+    moveq   #1,%d1
+    move.l  %d4,(%a3)
+    move.l  %d7,4(%a3)
     rts
 
 probe_bank_distinct:
@@ -289,7 +367,7 @@ serial_wait_tbe:
     rts
 
     .section .rodata,"a"
-banner:          .asciz "AMIDIAG proto=1 milestone=M2.5 cpu=68000\r\n"
+banner:          .asciz "AMIDIAG proto=1 milestone=M2.6 cpu=68000\r\n"
 boot_record:     .asciz "BOOT phase=reset status=PASS\r\n"
 vector_record:   .asciz "TEST id=BOOT.VECTORS status=PASS\r\n"
 serial_record:   .asciz "TEST id=BOOT.SERIAL status=PASS\r\n"
@@ -299,6 +377,8 @@ address_pass:    .asciz "TEST id=MEM.ADDRESS status=PASS bits=A2-A18 probes=17 m
 address_fail_record:.asciz "TEST id=MEM.ADDRESS status=FAIL bits=A2-A18 mode=preserve-alias\r\n"
 arena_pass:      .asciz "TEST id=MEM.ARENA status=PASS start=0x00006000 bytes=4096 cells=1024 patterns=4 mode=preserve\r\n"
 arena_fail_record:.asciz "TEST id=MEM.ARENA status=FAIL start=0x00006000 bytes=4096 mode=preserve\r\n"
+march_pass:      .asciz "TEST id=MEM.MARCH status=PASS start=0x00006000 bytes=4096 cells=1024 pairs=512 algorithm=paired-c-minus mode=preserve\r\n"
+march_fail_record:.asciz "TEST id=MEM.MARCH status=FAIL start=0x00006000 bytes=4096 algorithm=paired-c-minus mode=preserve\r\n"
 discover_pass:   .asciz "TEST id=MEM.CHIP.DISCOVER status=PASS step=524288 mode=preserve-alias\r\n"
 map_512k:        .asciz "MEM region=CHIP start=0x00000000 end=0x00080000 bytes=524288 confidence=discovered\r\n"
 map_1m:          .asciz "MEM region=CHIP start=0x00000000 end=0x00100000 bytes=1048576 confidence=discovered\r\n"
