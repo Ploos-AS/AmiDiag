@@ -6,11 +6,12 @@ PYTHON ?= python3
 BUILD := build
 ELF := $(BUILD)/amidiag.elf
 ROM := $(BUILD)/amidiag.rom
+EXPECTED_SERIAL := tests/m1_1/expected-serial.txt
 
 ASFLAGS := -m68000 -msoft-float -ffreestanding -fno-builtin -nostdlib -Wall -Wextra
 LDFLAGS := -nostdlib -Wl,-T,linker.ld -Wl,-Map,$(BUILD)/amidiag.map
 
-.PHONY: all rom check clean
+.PHONY: all rom check check-transcript clean
 
 all: rom
 
@@ -31,6 +32,13 @@ rom: $(ROM)
 
 check: rom
 	$(PYTHON) tools/check_rom.py $(ROM)
+	$(PYTHON) tools/check_serial.py $(EXPECTED_SERIAL)
+
+# Use after an emulator or real machine has captured a serial transcript:
+#   make check-transcript TRANSCRIPT=build/m1_1-serial.txt
+check-transcript:
+	@test -n "$(TRANSCRIPT)" || (echo "TRANSCRIPT=<path> is required" >&2; exit 2)
+	$(PYTHON) tools/check_serial.py $(TRANSCRIPT)
 
 clean:
 	rm -rf $(BUILD)
