@@ -8,6 +8,25 @@ PORT=${AMIDIAG_SERIAL_PORT:-1234}
 FSUAE=${FS_UAE:-fs-uae}
 PYTHON=${PYTHON:-python3}
 
+case "$CHIP_KIB" in
+  512)
+    MEM_RECORD='MEM region=CHIP start=0x00000000 end=0x00080000 bytes=524288 confidence=discovered'
+    ;;
+  1024)
+    MEM_RECORD='MEM region=CHIP start=0x00000000 end=0x00100000 bytes=1048576 confidence=discovered'
+    ;;
+  1536)
+    MEM_RECORD='MEM region=CHIP start=0x00000000 end=0x00180000 bytes=1572864 confidence=discovered'
+    ;;
+  2048)
+    MEM_RECORD='MEM region=CHIP start=0x00000000 end=0x00200000 bytes=2097152 confidence=discovered'
+    ;;
+  *)
+    echo "unsupported CHIP_KIB=$CHIP_KIB" >&2
+    exit 2
+    ;;
+esac
+
 mkdir -p build
 CFG=build/m2_2-${CHIP_KIB}.fs-uae
 cat > "$CFG" <<EOF
@@ -29,7 +48,8 @@ trap 'kill "$EMU_PID" 2>/dev/null || true; wait "$EMU_PID" 2>/dev/null || true' 
   --expect 'BOOT phase=reset status=PASS' \
   --expect 'TEST id=BOOT.VECTORS status=PASS' \
   --expect 'TEST id=BOOT.SERIAL status=PASS' \
-  --expect 'TEST id=MEM.CHIP.DISCOVER status=PASS step=524288 mode=preserve-alias'
+  --expect 'TEST id=MEM.CHIP.DISCOVER status=PASS step=524288 mode=preserve-alias' \
+  --expect "$MEM_RECORD"
 
 "$PYTHON" tools/check_serial.py "$OUT" --chip-kib "$CHIP_KIB"
 echo "PASS: FS-UAE M2.2 discovered ${CHIP_KIB} KiB Chip RAM"
