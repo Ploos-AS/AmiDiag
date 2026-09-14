@@ -1,9 +1,6 @@
-name: M3.3 FS-UAE qualification
+name: M3.3 FS-UAE qualification (frozen)
 
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -17,7 +14,10 @@ jobs:
       CROSS: m68k-linux-gnu-
       FS_UAE: xvfb-run -a fs-uae
     steps:
+      # Historical qualification source. Successful run: 34893350082.
       - uses: actions/checkout@v4
+        with:
+          ref: 11ad461e6eb200c2389a22d0ccc45e32c122c2ac
 
       - name: Install 68000 toolchain and FS-UAE
         run: |
