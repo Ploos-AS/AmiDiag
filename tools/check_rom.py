@@ -7,6 +7,18 @@ ROM_BASE = 0x00F80000
 ROM_SIZE = 512 * 1024
 CHIP_RAM_MAX = 0x00200000
 
+REQUIRED_MARKERS = (
+    b"AMIDIAG proto=1 milestone=M1.1",
+    b"BOOT phase=reset",
+    b"BOOT.VECTORS",
+    b"BOOT.SERIAL",
+    b"EXCEPTION id=CPU.BUS",
+    b"EXCEPTION id=CPU.ADDRESS",
+    b"EXCEPTION id=CPU.ILLEGAL",
+    b"EXCEPTION id=CPU.DIVZERO",
+    b"EXCEPTION id=CPU.UNKNOWN",
+)
+
 
 def fail(message: str) -> None:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -28,11 +40,14 @@ def main() -> None:
     if not (ROM_BASE <= reset_pc < ROM_BASE + ROM_SIZE) or (reset_pc & 1):
         fail(f"reset PC outside ROM: 0x{reset_pc:08X}")
 
-    for marker in (b"AMIDIAG proto=1", b"BOOT phase=reset", b"BOOT.SERIAL"):
+    for marker in REQUIRED_MARKERS:
         if marker not in data:
             fail(f"missing marker {marker!r}")
 
-    print(f"PASS: size={len(data)} sp=0x{initial_sp:08X} reset=0x{reset_pc:08X}")
+    print(
+        f"PASS: size={len(data)} sp=0x{initial_sp:08X} "
+        f"reset=0x{reset_pc:08X} markers={len(REQUIRED_MARKERS)}"
+    )
 
 
 if __name__ == "__main__":
