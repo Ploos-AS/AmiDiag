@@ -1,9 +1,9 @@
-name: M3.6 FS-UAE qualification
+name: M3.6 FS-UAE qualification (frozen)
 
+# Historical qualification: run 34911637841, successful at
+# 173148745426d0f05024d1e150e557ff732edb54.
+# Manual replay intentionally checks out that exact qualified revision.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,6 +18,8 @@ jobs:
       FS_UAE: xvfb-run -a fs-uae
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: 173148745426d0f05024d1e150e557ff732edb54
       - name: Install 68000 toolchain and FS-UAE
         run: |
           sudo apt-get update
