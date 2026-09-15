@@ -10,7 +10,7 @@ amiga_model = A500
 kickstart_file = $(pwd)/$ROM
 chip_memory = 512
 slow_memory = ${SLOW_KIB}
-fast_memory = ${FAST_KIB}
+zorro_ii_memory = ${FAST_KIB}
 sound_output = none
 serial_port = tcp://127.0.0.1:${PORT}/wait
 EOF
