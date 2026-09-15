@@ -1,9 +1,9 @@
-name: M3.5 FS-UAE qualification
+name: M3.5 FS-UAE qualification (frozen)
 
+# Historical qualification: run 34910964418, successful at
+# 5beddb00077436d94c515190d9aca5faf5298b4a.
+# Manual replay intentionally checks out that exact qualified revision.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,6 +18,8 @@ jobs:
       FS_UAE: xvfb-run -a fs-uae
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: 5beddb00077436d94c515190d9aca5faf5298b4a
 
       - name: Install 68000 toolchain and FS-UAE
         run: |
