@@ -10,7 +10,11 @@ amiga_model = A500
 kickstart_file = $(pwd)/$ROM
 chip_memory = 512
 slow_memory = ${SLOW_KIB}
-zorro_ii_memory = ${FAST_KIB}
+fast_memory = ${FAST_KIB}
+# M3.7 is a pre-OS guarded physical-memory probe, not Zorro AutoConfig.
+# Disable Z2 Fast RAM autoconfiguration so FS-UAE wires the requested
+# qualification RAM directly at 0x00200000, the documented UAE mapping.
+uae_fastmem_autoconfig = 0
 sound_output = none
 serial_port = tcp://127.0.0.1:${PORT}/wait
 EOF
