@@ -1,0 +1,55 @@
+name: M3.7 FS-UAE qualification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-m3-7:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      FS_UAE: xvfb-run -a fs-uae
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install 68000 toolchain and FS-UAE
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu fs-uae xvfb python3
+      - name: Build M3.7 ROM
+        run: |
+          mkdir -p build
+          m68k-linux-gnu-gcc -m68000 -msoft-float -ffreestanding -fno-builtin -nostdlib -Wall -Wextra -c src/cpu/m3_7_boot.S -o build/m3_7_boot.o
+          m68k-linux-gnu-gcc -m68000 -msoft-float -ffreestanding -fno-builtin -nostdlib -Wall -Wextra -nostdlib -Wl,-T,linker.ld -Wl,-Map,build/amidiag-m3_7.map build/m3_7_boot.o -o build/amidiag-m3_7.elf
+          m68k-linux-gnu-objcopy -O binary build/amidiag-m3_7.elf build/amidiag-m3_7.rom
+          truncate -s 524288 build/amidiag-m3_7.rom
+          python3 tools/check_m3_7_rom.py build/amidiag-m3_7.rom
+      - name: Qualify no expansion RAM
+        run: SLOW_KIB=0 FAST_KIB=0 AMIDIAG_SERIAL_PORT=1245 sh tools/run_fsuae_m3_7.sh build/amidiag-m3_7.rom build/m3_7-none-serial.txt
+      - name: Qualify 512 KiB Slow RAM
+        run: SLOW_KIB=512 FAST_KIB=0 AMIDIAG_SERIAL_PORT=1246 sh tools/run_fsuae_m3_7.sh build/amidiag-m3_7.rom build/m3_7-slow512-serial.txt
+      - name: Qualify 2 MiB Fast RAM
+        run: SLOW_KIB=0 FAST_KIB=2048 AMIDIAG_SERIAL_PORT=1247 sh tools/run_fsuae_m3_7.sh build/amidiag-m3_7.rom build/m3_7-fast2048-serial.txt
+      - name: Record evidence
+        if: always()
+        run: |
+          mkdir -p build/evidence
+          m68k-linux-gnu-gcc --version | head -n1 > build/evidence/toolchain.txt || true
+          fs-uae --version > build/evidence/fs-uae-version.txt 2>&1 || true
+          sha256sum build/amidiag-m3_7.rom > build/evidence/m3_7-rom-sha256.txt 2>/dev/null || true
+      - name: Upload M3.7 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: amidiag-m3_7-qualification
+          path: |
+            build/amidiag-m3_7.rom
+            build/amidiag-m3_7.map
+            build/m3_7-*
+            build/evidence/
+          if-no-files-found: warn
