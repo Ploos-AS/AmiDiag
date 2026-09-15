@@ -7,6 +7,8 @@
     .equ SERDATR_TBE, 13
     .equ SERPER_9600_PAL, 369
     .equ STACK_TOP, 0x0007FFFC
+    /* Fixed low Chip RAM scratch, consistent with the M3 guarded-probe state area. */
+    .equ SCRATCH_ADDR, 0x00003020
 
     .section .vectors,"a"
 _rom_vectors:
@@ -86,7 +88,7 @@ _rom_reset:
     bsr serial_puts
 
     /* Address-register arithmetic and memory round-trip in safe Chip RAM. */
-    lea scratch,%a0
+    move.l #SCRATCH_ADDR,%a0
     move.l #0xCAFEBABE,(%a0)
     move.l (%a0),%d0
     cmpi.l #0xCAFEBABE,%d0
@@ -130,10 +132,6 @@ serial_wait_tbe:
 halt:
     stop #0x2700
     bra halt
-
-    .section .bss,"aw",@nobits
-    .align 2
-scratch: .space 4
 
     .section .rodata,"a"
 banner: .asciz "AMIDIAG proto=1 milestone=M3.8 cpu=68000\r\n"
