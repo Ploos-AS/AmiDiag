@@ -1,9 +1,9 @@
 name: M3.8 FS-UAE qualification
 
+# Frozen qualification evidence:
+# run 34969043632 / job 104380488933
+# qualified source head: 9a0b68800b8b7eb375f41167aaecd6b9cfc13063
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -17,6 +17,8 @@ jobs:
       FS_UAE: xvfb-run -a fs-uae
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: 9a0b68800b8b7eb375f41167aaecd6b9cfc13063
       - name: Install 68000 toolchain and FS-UAE
         run: |
           sudo apt-get update
