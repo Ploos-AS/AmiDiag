@@ -22,6 +22,6 @@ serial_port = tcp://127.0.0.1:${PORT}/wait
 EOF
 ${FS_UAE:-fs-uae} "$CFG" >"$LOG" 2>&1 & PID=$!
 trap 'kill "$PID" 2>/dev/null || true; wait "$PID" 2>/dev/null || true' EXIT INT TERM
-python3 tools/capture_serial_tcp.py --port "$PORT" --output "$OUT" --connect-timeout 30 --read-timeout 15 --expect 'AMIDIAG proto=1 milestone=M3.10a cpu=68k' --expect 'TEST id=CPU.ID status=PASS'
+python3 tools/capture_serial_tcp.py --port "$PORT" --output "$OUT" --connect-timeout 30 --read-timeout 15 --expect 'AMIDIAG proto=1 milestone=M3.10a cpu=68k' --expect 'TEST id=CPU.BASELINE status=PASS cpu=68k probe=family-identification'
 python3 tools/check_m3_10a_serial.py "$OUT" "$EXPECT"
 echo "PASS: FS-UAE M3.10a profile=$CPU family=$EXPECT"
