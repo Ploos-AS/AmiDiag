@@ -1,8 +1,8 @@
 name: M3.10c FS-UAE qualification
+# Frozen after PASS: run 35086136881
+# Qualified source: bb293f420ab03a404c631808e97f6ac61793207d
+# Jobs: 68000=104761290258, 68010=104761290285, 68020=104761290289, 68030=104761290025
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
@@ -18,6 +18,8 @@ jobs:
       FS_UAE: xvfb-run -a fs-uae
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: bb293f420ab03a404c631808e97f6ac61793207d
       - name: Install tools
         run: |
           sudo apt-get update
