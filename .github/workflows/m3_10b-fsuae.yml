@@ -1,0 +1,46 @@
+name: M3.10b FS-UAE qualification
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        cpu: [68000, 68010, 68020]
+    env:
+      FS_UAE: xvfb-run -a fs-uae
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu fs-uae xvfb python3
+      - name: Build ROM
+        run: |
+          mkdir -p build
+          m68k-linux-gnu-gcc -m68000 -msoft-float -ffreestanding -fno-builtin -nostdlib -c src/cpu/m3_10b_boot.S -o build/m3_10b_boot.o
+          m68k-linux-gnu-gcc -m68000 -nostdlib -Wl,-T,linker.ld -Wl,-Map,build/amidiag-m3_10b.map build/m3_10b_boot.o -o build/amidiag-m3_10b.elf
+          m68k-linux-gnu-objcopy -O binary build/amidiag-m3_10b.elf build/amidiag-m3_10b.rom
+          truncate -s 524288 build/amidiag-m3_10b.rom
+          python3 tools/check_m3_10b_rom.py build/amidiag-m3_10b.rom
+      - name: Qualify CPU profile
+        run: AMIDIAG_SERIAL_PORT=1251 sh tools/run_fsuae_m3_10b.sh '${{ matrix.cpu }}' build/amidiag-m3_10b.rom
+      - name: Evidence
+        if: always()
+        run: |
+          mkdir -p build/evidence
+          sha256sum build/amidiag-m3_10b.rom > build/evidence/rom-sha256.txt 2>/dev/null || true
+          fs-uae --version > build/evidence/fs-uae-version.txt 2>&1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: amidiag-m3_10b-${{ matrix.cpu }}
+          path: build/
+          if-no-files-found: warn
