@@ -1,0 +1,53 @@
+name: M3.10e FS-UAE qualification
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/cpu/m3_10e_boot.S'
+      - 'tools/check_m3_10e_rom.py'
+      - 'tools/check_m3_10e_serial.py'
+      - 'tools/run_fsuae_m3_10e.sh'
+      - 'tools/capture_serial_tcp.py'
+      - '.github/workflows/m3_10e-fsuae.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        cpu: [68000, 68010, 68020, 68030, 68040, 68060]
+    env:
+      FS_UAE: xvfb-run -a fs-uae
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu fs-uae xvfb python3
+      - name: Build ROM
+        run: |
+          mkdir -p build
+          m68k-linux-gnu-gcc -m68000 -msoft-float -ffreestanding -fno-builtin -nostdlib -c src/cpu/m3_10e_boot.S -o build/m3_10e_boot.o
+          m68k-linux-gnu-gcc -m68000 -nostdlib -Wl,-T,linker.ld -Wl,-Map,build/amidiag-m3_10e.map build/m3_10e_boot.o -o build/amidiag-m3_10e.elf
+          m68k-linux-gnu-objcopy -O binary build/amidiag-m3_10e.elf build/amidiag-m3_10e.rom
+          truncate -s 524288 build/amidiag-m3_10e.rom
+          python3 tools/check_m3_10e_rom.py build/amidiag-m3_10e.rom
+      - name: Qualify CPU profile
+        run: AMIDIAG_SERIAL_PORT=1253 sh tools/run_fsuae_m3_10e.sh '${{ matrix.cpu }}' build/amidiag-m3_10e.rom
+      - name: Evidence
+        if: always()
+        run: |
+          mkdir -p build/evidence
+          sha256sum build/amidiag-m3_10e.rom > build/evidence/rom-sha256.txt 2>/dev/null || true
+          fs-uae --version > build/evidence/fs-uae-version.txt 2>&1 || true
+          printf '%s\n' '${{ matrix.cpu }}' > build/evidence/cpu-profile.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: amidiag-m3_10e-${{ matrix.cpu }}
+          path: build/
+          if-no-files-found: warn
