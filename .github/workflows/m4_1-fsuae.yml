@@ -1,0 +1,49 @@
+name: M4.1 FS-UAE qualification
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/cia/m4_1_boot.S'
+      - 'tools/check_m4_1_rom.py'
+      - 'tools/check_m4_1_serial.py'
+      - 'tools/run_fsuae_m4_1.sh'
+      - 'tools/capture_serial_tcp.py'
+      - '.github/workflows/m4_1-fsuae.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      FS_UAE: xvfb-run -a fs-uae
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu fs-uae xvfb python3
+      - name: Build ROM
+        run: |
+          mkdir -p build
+          m68k-linux-gnu-gcc -m68000 -msoft-float -ffreestanding -fno-builtin -nostdlib -c src/cia/m4_1_boot.S -o build/m4_1_boot.o
+          m68k-linux-gnu-gcc -m68000 -nostdlib -Wl,-T,linker.ld -Wl,-Map,build/amidiag-m4_1.map build/m4_1_boot.o -o build/amidiag-m4_1.elf
+          m68k-linux-gnu-objcopy -O binary build/amidiag-m4_1.elf build/amidiag-m4_1.rom
+          truncate -s 524288 build/amidiag-m4_1.rom
+          python3 tools/check_m4_1_rom.py build/amidiag-m4_1.rom
+      - name: Qualify A500 68000
+        run: AMIDIAG_SERIAL_PORT=1253 sh tools/run_fsuae_m4_1.sh build/amidiag-m4_1.rom
+      - name: Evidence
+        if: always()
+        run: |
+          mkdir -p build/evidence
+          sha256sum build/amidiag-m4_1.rom > build/evidence/rom-sha256.txt 2>/dev/null || true
+          fs-uae --version > build/evidence/fs-uae-version.txt 2>&1 || true
+          printf '%s\n' 'A500/68000' > build/evidence/machine-profile.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: amidiag-m4_1-a500-68000
+          path: build/
+          if-no-files-found: warn
