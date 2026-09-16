@@ -10,8 +10,8 @@
     .equ CIAB_TAHI,0x00BFD500
     .equ CIAB_TBLO,0x00BFD600
     .equ CIAB_TBHI,0x00BFD700
-    .equ CIAB_CRA, 0x00BFDE00
-    .equ CIAB_CRB, 0x00BFDF00
+    .equ CIAB_CRA,0x00BFDE00
+    .equ CIAB_CRB,0x00BFDF00
     .equ SERDATR,0x00DFF018
     .equ SERDAT,0x00DFF030
     .equ SERPER,0x00DFF032
@@ -26,6 +26,7 @@ _rom_reset:
     bclr #0,CIAA_PRA
     move.l #STACK_TOP,%sp
     move.w #369,SERPER
+    moveq #0,%d7                  /* failure count: keep all state ROM-only */
     lea banner,%a0
     bsr serial_puts
     lea boot_record,%a0
@@ -52,7 +53,7 @@ _rom_reset:
     lea ciab_tb_fail,%a3
     bsr test_timer
 
-    tst.b failure_count
+    tst.b %d7
     bne summary_bad
     lea summary_pass,%a0
     bsr serial_puts
@@ -65,7 +66,7 @@ summary_bad:
 /* A0=timer low (high is +0x100), A1=control, A2=PASS, A3=FAIL.
  * Preserve control byte and current counter snapshot.  Force-load a known
  * latch, start continuous Phi2 counting, observe bounded progress, then
- * stop and restore saved counter/control state.  ICR is never enabled. */
+ * stop and restore saved counter/control state. ICR is never enabled. */
 test_timer:
     move.b (%a1),%d4
     move.b (%a0),%d5
@@ -73,12 +74,12 @@ test_timer:
 
     move.b %d4,%d0
     andi.b #0xFE,%d0
-    move.b %d0,(%a1)             /* stop */
+    move.b %d0,(%a1)
     move.b #0xFF,(%a0)
-    move.b #0x7F,0x100(%a0)      /* latch 0x7fff */
+    move.b #0x7F,0x100(%a0)
     move.b %d0,%d1
-    andi.b #0xC0,%d1             /* preserve serial/input-mode top bits */
-    ori.b #0x11,%d1              /* START + LOAD, continuous */
+    andi.b #0xC0,%d1
+    ori.b #0x11,%d1
     move.b %d1,(%a1)
     nop
     nop
@@ -95,7 +96,7 @@ test_timer:
     cmp.w %d2,%d0
     bne 2f
     dbra %d3,1b
-    addq.b #1,failure_count
+    addq.b #1,%d7
     move.b %d4,%d0
     andi.b #0xFE,%d0
     move.b %d0,(%a1)
@@ -130,8 +131,6 @@ halt:
     stop #0x2700
     bra halt
 
-    .section .data,"aw"
-failure_count: .byte 0
     .section .rodata,"a"
 banner: .asciz "AMIDIAG proto=1 milestone=M4.2 cpu=68000\r\n"
 boot_record: .asciz "BOOT phase=reset status=PASS\r\n"
