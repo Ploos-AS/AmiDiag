@@ -41,7 +41,32 @@ cacr_present:
     lea probe_cacr_present,%a0
     bsr serial_puts
 
-    /* M3.10c: reversible CACR.ED probe distinguishes 68020/68030+. */
+    /* M3.10d stage 1 comes before the M3.10c CACR.ED discriminator.
+     * Read-only MOVEC ITT0,D0 identifies the 68040+ control-register set.
+     * 68020/68030 reject ITT0 and continue to the reversible CACR.ED probe.
+     */
+    move.l #illegal_itt0,VECTOR_ILLEGAL
+    .word 0x4E7A,0x0004              /* MOVEC ITT0,D0 */
+
+itt0_present:
+    lea probe_itt0_present,%a0
+    bsr serial_puts
+
+    /* M3.10d stage 2: PCR is 68060-specific; 68040 rejects it. */
+    move.l #illegal_pcr,VECTOR_ILLEGAL
+    .word 0x4E7A,0x0808              /* MOVEC PCR,D0 */
+
+pcr_present:
+    lea probe_pcr_present,%a0
+    bsr serial_puts
+    lea cpu_68060,%a0
+    bsr serial_puts
+    lea id_68060,%a0
+    bsr serial_puts
+    bra baseline_later_halt
+
+cpu_020_030_path:
+    /* M3.10c: reversible CACR.ED probe distinguishes 68020 from 68030. */
     .word 0x4E7A,0x2002              /* MOVEC CACR,D2 */
     move.l %d2,%d1
     ori.l #0x00000100,%d1
@@ -49,7 +74,7 @@ cacr_present:
     .word 0x4E7A,0x0002              /* MOVEC CACR,D0 */
     .word 0x4E7B,0x2002              /* MOVEC D2,CACR: restore */
     btst #8,%d0
-    bne cpu_030plus_path
+    bne cpu_030_path
 
 cpu_020_path:
     lea probe_dc_ignored,%a0
@@ -60,33 +85,12 @@ cpu_020_path:
     bsr serial_puts
     bra baseline_later_halt
 
-cpu_030plus_path:
+cpu_030_path:
     lea probe_dc_present,%a0
     bsr serial_puts
-
-    /* M3.10d stage 1: read-only MOVEC ITT0,D0.
-     * ITT0 is a 68040+ control register. 68030 must reject it.
-     * Raw MOVEC keeps the complete ROM build at the 68000 baseline.
-     */
-    move.l #illegal_itt0,VECTOR_ILLEGAL
-    .word 0x4E7A,0x0004              /* MOVEC ITT0,D0 (verified selector) */
-
-itt0_present:
-    lea probe_itt0_present,%a0
+    lea cpu_68030,%a0
     bsr serial_puts
-
-    /* M3.10d stage 2: read-only MOVEC PCR,D0.
-     * PCR is 68060-specific. 68040 must reject it.
-     */
-    move.l #illegal_pcr,VECTOR_ILLEGAL
-    .word 0x4E7A,0x0808              /* MOVEC PCR,D0 */
-
-pcr_present:
-    lea probe_pcr_present,%a0
-    bsr serial_puts
-    lea cpu_68060,%a0
-    bsr serial_puts
-    lea id_68060,%a0
+    lea id_68030,%a0
     bsr serial_puts
     bra baseline_later_halt
 
@@ -122,11 +126,7 @@ illegal_itt0:
 itt0_unsupported:
     lea probe_itt0_illegal,%a0
     bsr serial_puts
-    lea cpu_68030,%a0
-    bsr serial_puts
-    lea id_68030,%a0
-    bsr serial_puts
-    bra baseline_later_halt
+    bra cpu_020_030_path
 
 illegal_pcr:
     move.l #pcr_unsupported,2(%sp)
