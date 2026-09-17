@@ -1,8 +1,7 @@
 name: M4.3 FS-UAE qualification
+# FROZEN after PASS run 35201024264, job 105135532844.
+# Qualified source commit: 11b15839cee19f2bf623c24e88452c1c7b70284f
 on:
-  push:
-    branches: [main]
-    paths: ['src/cia/m4_3_boot.S','tools/check_m4_3_rom.py','tools/check_m4_3_serial.py','tools/run_fsuae_m4_3.sh','.github/workflows/m4_3-fsuae.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -14,6 +13,8 @@ jobs:
       FS_UAE: xvfb-run -a fs-uae
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: 11b15839cee19f2bf623c24e88452c1c7b70284f
       - name: Install tools
         run: |
           sudo apt-get update
