@@ -1,0 +1,35 @@
+name: M4.3 FS-UAE qualification
+on:
+  push:
+    branches: [main]
+    paths: ['src/cia/m4_3_boot.S','tools/check_m4_3_rom.py','tools/check_m4_3_serial.py','tools/run_fsuae_m4_3.sh','.github/workflows/m4_3-fsuae.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      FS_UAE: xvfb-run -a fs-uae
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu fs-uae xvfb python3
+      - name: Build ROM
+        run: |
+          mkdir -p build
+          m68k-linux-gnu-gcc -m68000 -msoft-float -ffreestanding -fno-builtin -nostdlib -c src/cia/m4_3_boot.S -o build/m4_3_boot.o
+          m68k-linux-gnu-gcc -m68000 -nostdlib -Wl,-T,linker.ld -Wl,-Map,build/amidiag-m4_3.map build/m4_3_boot.o -o build/amidiag-m4_3.elf
+          m68k-linux-gnu-objcopy -O binary build/amidiag-m4_3.elf build/amidiag-m4_3.rom
+          truncate -s 524288 build/amidiag-m4_3.rom
+          python3 tools/check_m4_3_rom.py build/amidiag-m4_3.rom
+      - name: Qualify A500 68000
+        run: AMIDIAG_SERIAL_PORT=1255 sh tools/run_fsuae_m4_3.sh build/amidiag-m4_3.rom
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: amidiag-m4_3-a500-68000
+          path: build/
