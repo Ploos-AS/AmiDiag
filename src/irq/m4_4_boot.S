@@ -26,8 +26,7 @@
     .globl _rom_reset
 _rom_reset:
     move.w #0x2700,%sr
-    /* CIAA PA0 is /OVL.  Make it an output before driving it low; merely
-     * changing PRA while DDRA remains input can leave the ROM overlay active. */
+    /* CIAA PA0 is /OVL. Make it an output before driving it low. */
     bset #0,CIAA_DDRA
     bclr #0,CIAA_PRA
     move.l #STACK_TOP,%sp
@@ -57,7 +56,7 @@ _rom_reset:
     move.b CIAA_TALO,%d5
     move.b CIAA_TAHI,%d6
     move.b %d4,%d0
-    andi.b #0xDE,%d0            /* stop; force Phi2 source */
+    andi.b #0xDE,%d0
     move.b %d0,CIAA_CRA
     move.b #0x20,CIAA_TALO
     move.b #0x00,CIAA_TAHI
@@ -66,17 +65,37 @@ _rom_reset:
     move.b #0x81,CIAA_ICR
     move.w #INTENA_TEST,INTENA
     move.b %d0,%d1
-    andi.b #0xF6,%d1            /* continuous, preserve unrelated CRA bits */
-    ori.b #0x11,%d1             /* START + force-load */
+    andi.b #0xF6,%d1
+    ori.b #0x11,%d1
     move.b %d1,CIAA_CRA
 
-    /* Stage 1: keep CPU masked and prove CIA -> Paula PORTS first. */
-    move.l #0x00020000,%d3
-1:  move.w INTREQR,%d0
-    andi.w #INTF_PORTS,%d0
+    /* Synchronize on a proven CIA Timer A request first.  Reading ICR
+     * acknowledges that request; continuous Timer A then supplies a fresh
+     * edge for the CIA -> Paula PORTS path.  This separates a timer failure
+     * from a Paula routing failure without relying on an unsynchronised first
+     * underflow during setup. */
+    move.w #0x7fff,%d3
+1:  move.b CIAA_ICR,%d0
+    btst #0,%d0
     bne 2f
+    dbra %d3,1b
+    bsr cleanup
+    lea paula_fail,%a0
+    bsr serial_puts
+    lea cpu_skip,%a0
+    bsr serial_puts
+    lea summary_fail,%a0
+    bsr serial_puts
+    bra halt
+
+    /* Stage 1: CPU remains masked; require a fresh CIA -> Paula PORTS request. */
+2:  move.w #INTF_PORTS,INTREQ
+    move.l #0x00020000,%d3
+3:  move.w INTREQR,%d0
+    andi.w #INTF_PORTS,%d0
+    bne 4f
     subq.l #1,%d3
-    bne 1b
+    bne 3b
     bsr cleanup
     lea paula_fail,%a0
     bsr serial_puts
@@ -87,12 +106,12 @@ _rom_reset:
     bra halt
 
     /* Stage 2: unmask the CPU and require the level-2 autovector handler. */
-2:  move.w #0x2000,%sr
+4:  move.w #0x2000,%sr
     move.l #0x00020000,%d3
-3:  tst.l IRQ_FLAG
-    bne 4f
+5:  tst.l IRQ_FLAG
+    bne 6f
     subq.l #1,%d3
-    bne 3b
+    bne 5b
     move.w #0x2700,%sr
     bsr cleanup
     lea paula_pass,%a0
@@ -102,7 +121,7 @@ _rom_reset:
     lea summary_fail,%a0
     bsr serial_puts
     bra halt
-4:
+6:
     move.w #0x2700,%sr
     bsr cleanup
     lea paula_pass,%a0
@@ -117,16 +136,16 @@ level2_handler:
     movem.l %d0-%d1/%a0,-(%sp)
     move.w INTREQR,%d0
     andi.w #INTF_PORTS,%d0
-    beq 5f
-    move.b CIAA_ICR,%d1         /* acknowledge CIA source */
-    move.w #INTF_PORTS,INTREQ   /* acknowledge Paula source */
+    beq 7f
+    move.b CIAA_ICR,%d1
+    move.w #INTF_PORTS,INTREQ
     move.l #1,IRQ_FLAG
-5:  movem.l (%sp)+,%d0-%d1/%a0
+7:  movem.l (%sp)+,%d0-%d1/%a0
     rte
 
 cleanup:
-    move.b #0x01,CIAA_ICR       /* Timer A mask is not readable: leave disabled */
-    move.w #0x7fff,INTENA       /* remove all enables established for isolation */
+    move.b #0x01,CIAA_ICR
+    move.w #0x7fff,INTENA
     move.b %d4,%d0
     andi.b #0xFE,%d0
     move.b %d0,CIAA_CRA
@@ -137,22 +156,22 @@ cleanup:
     move.b %d4,CIAA_CRA
     move.l %d7,VEC_L2
     tst.w %d2
-    beq 6f
+    beq 8f
     move.w %d2,%d0
     ori.w #0x8000,%d0
-    move.w %d0,INTENA           /* restore original Paula enable snapshot */
-6:  rts
+    move.w %d0,INTENA
+8:  rts
 
 serial_puts:
     move.b (%a0)+,%d0
-    beq 8f
-7:  btst #13,SERDATR
-    beq 7b
+    beq 10f
+9:  btst #13,SERDATR
+    beq 9b
     andi.w #0x00ff,%d0
     ori.w #0x0100,%d0
     move.w %d0,SERDAT
     bra serial_puts
-8:  rts
+10: rts
 halt:
     stop #0x2700
     bra halt
