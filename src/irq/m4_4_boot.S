@@ -17,6 +17,7 @@
     .equ INTF_SETCLR,0x8000
     .equ INTF_INTEN,0x4000
     .equ INTF_PORTS,0x0008
+    .equ INTENA_TEST,0xC008
 
     .section .vectors,"a"
     .long STACK_TOP
@@ -57,7 +58,7 @@ _rom_reset:
 
     /* Enable CIA Timer A and Paula PORTS + master, then arm timer. */
     move.b #0x81,CIAA_ICR
-    move.w #(INTF_SETCLR|INTF_INTEN|INTF_PORTS),INTENA
+    move.w #INTENA_TEST,INTENA
     move.b %d0,%d1
     andi.b #0xD6,%d1
     ori.b #0x19,%d1             /* START + one-shot + force-load */
@@ -94,8 +95,8 @@ level2_handler:
     move.w INTREQR,%d0
     andi.w #INTF_PORTS,%d0
     beq 3f
-    move.b CIAA_ICR,%d1         /* acknowledge CIA source first */
-    move.w #INTF_PORTS,INTREQ   /* then clear Paula PORTS */
+    move.b CIAA_ICR,%d1
+    move.w #INTF_PORTS,INTREQ
     move.l #1,IRQ_FLAG
 3:  movem.l (%sp)+,%d0-%d1/%a0
     rte
