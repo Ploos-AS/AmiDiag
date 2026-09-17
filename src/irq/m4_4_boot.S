@@ -1,5 +1,6 @@
 /* AmiDiag M4.4: clean-room Paula/68000 interrupt path, A500 baseline. */
     .equ CIAA_PRA,0x00BFE001
+    .equ CIAA_DDRA,0x00BFE201
     .equ CIAA_TALO,0x00BFE401
     .equ CIAA_TAHI,0x00BFE501
     .equ CIAA_ICR,0x00BFED01
@@ -25,6 +26,9 @@
     .globl _rom_reset
 _rom_reset:
     move.w #0x2700,%sr
+    /* CIAA PA0 is /OVL.  Make it an output before driving it low; merely
+     * changing PRA while DDRA remains input can leave the ROM overlay active. */
+    bset #0,CIAA_DDRA
     bclr #0,CIAA_PRA
     move.l #STACK_TOP,%sp
     move.w #369,SERPER
