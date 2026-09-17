@@ -14,6 +14,8 @@
     .equ SERPER,  0x00DFF032
     .equ STACK_TOP,0x0007FFFC
     .equ IRQ_FLAG,0x0007F000
+    /* 68000 autovectors are vectors 25..31 for interrupt levels 1..7.
+     * Level 2 is vector 26, therefore 26 * 4 = 0x68. */
     .equ VEC_L2,0x00000068
     .equ INTF_PORTS,0x0008
     .equ INTENA_TEST,0xC008
@@ -102,16 +104,14 @@ _rom_reset:
     bsr serial_puts
     bra halt
 
-    /* Stage 2: Stage 1 has proved CIA -> Paula.  A request that became pending
-     * while IPL=7 is not a useful emulator-independent CPU-edge test, so clear
-     * it, acknowledge the CIA source, unmask level 2, and generate a fresh
-     * Paula PORTS request through INTREQ SET/CLR.  This independently proves
-     * Paula PORTS -> 68000 level-2 autovector while preserving the full two-link
-     * M4.4 qualification. */
+    /* Stage 2: Stage 1 has proved CIA -> Paula.  Clear/acknowledge the old
+     * request, open IPL below level 2, then generate a fresh Paula PORTS
+     * request through INTREQ SET/CLR. */
 4:  move.b CIAA_ICR,%d0
     move.w #INTF_PORTS,INTREQ
     clr.l IRQ_FLAG
-    move.w #0x2000,%sr
+    /* SR interrupt mask 1: level-2 IRQ is accepted while level-1 stays masked. */
+    move.w #0x2100,%sr
     move.w #INTREQ_TEST,INTREQ
     move.l #0x00020000,%d3
 5:  tst.l IRQ_FLAG
