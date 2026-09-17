@@ -14,8 +14,6 @@
     .equ SERPER,  0x00DFF032
     .equ STACK_TOP,0x0007FFFC
     .equ IRQ_FLAG,0x0007F000
-    /* 68000 autovectors are vectors 25..31 for interrupt levels 1..7.
-     * Level 2 is vector 26, therefore 26 * 4 = 0x68. */
     .equ VEC_L2,0x00000068
     .equ INTF_PORTS,0x0008
     .equ INTENA_TEST,0xC008
@@ -42,8 +40,6 @@ _rom_reset:
     move.l VEC_L2,%d7
     lea level2_handler,%a0
     move.l %a0,VEC_L2
-    /* Prove that low memory really is RAM after /OVL release and that the
-     * exact handler address survived the write. */
     cmp.l VEC_L2,%a0
     beq vector_ok
     lea vector_fail,%a0
@@ -60,6 +56,9 @@ vector_ok:
     move.w #0x7fff,INTENA
     move.w #INTF_PORTS,INTREQ
 
+    /* Clear stale CIA state before enabling the Timer A mask. Reading ICR is
+     * an acknowledge operation, so do not poll it after the test starts: a
+     * read would deassert CIA-A /IRQ before Paula has necessarily sampled it. */
     move.b #0x01,CIAA_ICR
     move.b CIAA_ICR,%d0
 
@@ -79,31 +78,14 @@ vector_ok:
     ori.b #0x11,%d1
     move.b %d1,CIAA_CRA
 
-    move.w #0x7fff,%d3
-1:  move.b CIAA_ICR,%d0
-    btst #0,%d0
-    bne 2f
-    dbra %d3,1b
-    bsr cleanup
-    lea cia_sync_fail,%a0
-    bsr serial_puts
-    lea paula_fail,%a0
-    bsr serial_puts
-    lea cpu_skip,%a0
-    bsr serial_puts
-    lea summary_fail,%a0
-    bsr serial_puts
-    bra halt
-
-2:  lea cia_sync_pass,%a0
-    bsr serial_puts
-    move.w #INTF_PORTS,INTREQ
+    /* Stage 1: observe Paula first.  This leaves CIA-A /IRQ asserted until
+     * PORTS has been observed, then acknowledges CIA exactly once. */
     move.l #0x00020000,%d3
-3:  move.w INTREQR,%d0
+1:  move.w INTREQR,%d0
     andi.w #INTF_PORTS,%d0
-    bne 4f
+    bne 2f
     subq.l #1,%d3
-    bne 3b
+    bne 1b
     bsr cleanup
     lea paula_route_fail,%a0
     bsr serial_puts
@@ -115,15 +97,23 @@ vector_ok:
     bsr serial_puts
     bra halt
 
-4:  lea paula_route_pass,%a0
+2:  lea paula_route_pass,%a0
     bsr serial_puts
+    /* Now acknowledge the CIA source and clear the old Paula request. */
     move.b CIAA_ICR,%d0
+    btst #0,%d0
+    bne cia_seen
+    lea cia_sync_fail,%a0
+    bsr serial_puts
+    bra stage2
+cia_seen:
+    lea cia_sync_pass,%a0
+    bsr serial_puts
+stage2:
     move.w #INTF_PORTS,INTREQ
     clr.l IRQ_FLAG
     move.w #0x2100,%sr
     move.w #INTREQ_TEST,INTREQ
-    /* Confirm the synthetic PORTS request is actually pending before blaming
-     * vector delivery. */
     move.w INTREQR,%d0
     andi.w #INTF_PORTS,%d0
     bne cpu_req_pending
@@ -142,10 +132,10 @@ cpu_req_pending:
     lea cpu_req_pass,%a0
     bsr serial_puts
     move.l #0x00020000,%d3
-5:  tst.l IRQ_FLAG
-    bne 6f
+3:  tst.l IRQ_FLAG
+    bne 4f
     subq.l #1,%d3
-    bne 5b
+    bne 3b
     move.w #0x2700,%sr
     bsr cleanup
     lea handler_fail,%a0
@@ -157,7 +147,7 @@ cpu_req_pending:
     lea summary_fail,%a0
     bsr serial_puts
     bra halt
-6:
+4:
     move.w #0x2700,%sr
     bsr cleanup
     lea handler_pass,%a0
@@ -174,11 +164,11 @@ level2_handler:
     movem.l %d0-%d1/%a0,-(%sp)
     move.w INTREQR,%d0
     andi.w #INTF_PORTS,%d0
-    beq 7f
+    beq 5f
     move.b CIAA_ICR,%d1
     move.w #INTF_PORTS,INTREQ
     move.l #1,IRQ_FLAG
-7:  movem.l (%sp)+,%d0-%d1/%a0
+5:  movem.l (%sp)+,%d0-%d1/%a0
     rte
 
 cleanup:
@@ -194,22 +184,22 @@ cleanup:
     move.b %d4,CIAA_CRA
     move.l %d7,VEC_L2
     tst.w %d2
-    beq 8f
+    beq 6f
     move.w %d2,%d0
     ori.w #0x8000,%d0
     move.w %d0,INTENA
-8:  rts
+6:  rts
 
 serial_puts:
     move.b (%a0)+,%d0
-    beq 10f
-9:  btst #13,SERDATR
-    beq 9b
+    beq 8f
+7:  btst #13,SERDATR
+    beq 7b
     andi.w #0x00ff,%d0
     ori.w #0x0100,%d0
     move.w %d0,SERDAT
     bra serial_puts
-10: rts
+8:  rts
 halt:
     stop #0x2700
     bra halt
@@ -219,10 +209,10 @@ banner: .asciz "AMIDIAG proto=1 milestone=M4.4 cpu=68000\r\n"
 boot_record: .asciz "BOOT phase=reset status=PASS\r\n"
 vector_pass: .asciz "IRQ.DIAG vector=0x68 writable=PASS handler-address=PASS\r\n"
 vector_fail: .asciz "IRQ.DIAG vector=0x68 writable=FAIL reason=readback-mismatch\r\n"
-cia_sync_pass: .asciz "IRQ.DIAG cia=timerA-pending status=PASS\r\n"
-cia_sync_fail: .asciz "IRQ.DIAG cia=timerA-pending status=FAIL\r\n"
-paula_route_pass: .asciz "IRQ.DIAG cia-to-paula=PORTS status=PASS\r\n"
-paula_route_fail: .asciz "IRQ.DIAG cia-to-paula=PORTS status=FAIL\r\n"
+cia_sync_pass: .asciz "IRQ.DIAG cia=timerA-pending status=PASS ack=after-paula\r\n"
+cia_sync_fail: .asciz "IRQ.DIAG cia=timerA-pending status=FAIL ack=after-paula\r\n"
+paula_route_pass: .asciz "IRQ.DIAG cia-to-paula=PORTS status=PASS ack-order=paula-before-cia\r\n"
+paula_route_fail: .asciz "IRQ.DIAG cia-to-paula=PORTS status=FAIL ack-order=paula-before-cia\r\n"
 cpu_req_pass: .asciz "IRQ.DIAG cpu-stage intreq=PORTS pending=PASS\r\n"
 cpu_req_fail: .asciz "IRQ.DIAG cpu-stage intreq=PORTS pending=FAIL\r\n"
 handler_pass: .asciz "IRQ.DIAG cpu-stage handler-entered=PASS\r\n"
