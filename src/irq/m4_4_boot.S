@@ -17,6 +17,7 @@
     .equ VEC_L2,0x00000068
     .equ INTF_PORTS,0x0008
     .equ INTENA_TEST,0xC008
+    .equ INTREQ_TEST,0x8008
 
     .section .vectors,"a"
     .long STACK_TOP
@@ -69,11 +70,7 @@ _rom_reset:
     ori.b #0x11,%d1
     move.b %d1,CIAA_CRA
 
-    /* Synchronize on a proven CIA Timer A request first.  Reading ICR
-     * acknowledges that request; continuous Timer A then supplies a fresh
-     * edge for the CIA -> Paula PORTS path.  This separates a timer failure
-     * from a Paula routing failure without relying on an unsynchronised first
-     * underflow during setup. */
+    /* Synchronize on a proven CIA Timer A request first. */
     move.w #0x7fff,%d3
 1:  move.b CIAA_ICR,%d0
     btst #0,%d0
@@ -105,8 +102,17 @@ _rom_reset:
     bsr serial_puts
     bra halt
 
-    /* Stage 2: unmask the CPU and require the level-2 autovector handler. */
-4:  move.w #0x2000,%sr
+    /* Stage 2: Stage 1 has proved CIA -> Paula.  A request that became pending
+     * while IPL=7 is not a useful emulator-independent CPU-edge test, so clear
+     * it, acknowledge the CIA source, unmask level 2, and generate a fresh
+     * Paula PORTS request through INTREQ SET/CLR.  This independently proves
+     * Paula PORTS -> 68000 level-2 autovector while preserving the full two-link
+     * M4.4 qualification. */
+4:  move.b CIAA_ICR,%d0
+    move.w #INTF_PORTS,INTREQ
+    clr.l IRQ_FLAG
+    move.w #0x2000,%sr
+    move.w #INTREQ_TEST,INTREQ
     move.l #0x00020000,%d3
 5:  tst.l IRQ_FLAG
     bne 6f
