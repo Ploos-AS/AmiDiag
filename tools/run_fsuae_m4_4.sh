@@ -9,6 +9,12 @@ cpu = 68000
 kickstart_file = $(pwd)/$ROM
 chip_memory = 512
 accuracy = 1
+# M4.4 exercises real Paula -> 68000 interrupt delivery. Force the
+# cycle-exact CPU/chipset path instead of allowing translated execution.
+uae_cpu_speed = real
+uae_cpu_compatible = true
+uae_cpu_cycle_exact = true
+uae_blitter_cycle_exact = true
 sound_output = none
 serial_port = tcp://127.0.0.1:${PORT}/wait
 EOF
