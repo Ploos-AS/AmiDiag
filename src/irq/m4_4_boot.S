@@ -76,6 +76,8 @@ vector_ok:
     move.b CIAA_ICR,%d0
     move.b #0x01,CIAA_ICR
     move.b #0x81,CIAA_ICR
+    /* ICR mask is write-only.  Validate the actual IRQ output path by
+     * waiting for PORTS after a fresh timer expiry, not by reading ICR. */
     move.b #0x20,CIAA_TALO
     move.b #0x00,CIAA_TAHI
     clr.l IRQ_FLAG
@@ -90,6 +92,12 @@ vector_ok:
     andi.b #0xC0,%d0
     ori.b #0x19,%d0
     move.b %d0,CIAA_CRA
+    /* Give the 8520 a short synchronization window after ICR mask/start
+     * programming before diagnosing the downstream Paula line. */
+    move.l #0x00000100,%d5
+cia_sync:
+    subq.l #1,%d5
+    bne cia_sync
 
     /* Observe each hardware link while CPU IRQs are still eligible.  Reading
      * ICR clears CIA pending state, so do not read it here; instead observe
@@ -224,6 +232,7 @@ timer_progress_pass: .asciz "IRQ.DIAG chain timerA-progress=PASS\r\n"
 timer_progress_fail: .asciz "IRQ.DIAG chain timerA-progress=FAIL\r\n"
 ports_pending_pass: .asciz "IRQ.DIAG chain paula-PORTS-pending=PASS\r\n"
 ports_pending_fail: .asciz "IRQ.DIAG chain paula-PORTS-pending=FAIL\r\n"
+cia_route_note: .asciz "IRQ.DIAG chain ciaA-irq-route=PORTS source=TIMERA\r\n"
 sr_unmask_pass: .asciz "IRQ.DIAG cpu-stage sr-ipl-after=1 status=PASS\r\n"
 paula_pass: .asciz "IRQ.PAULA status=PASS source=PORTS intena=enabled intreq=observed cleanup=PASS\r\n"
 paula_fail: .asciz "IRQ.PAULA status=FAIL source=PORTS reason=timeout cleanup=attempted\r\n"
