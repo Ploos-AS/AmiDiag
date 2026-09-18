@@ -91,6 +91,42 @@ vector_ok:
     ori.b #0x19,%d0
     move.b %d0,CIAA_CRA
 
+    /* Observe each hardware link while CPU IRQs are still eligible.  Reading
+     * ICR clears CIA pending state, so do not read it here; instead observe
+     * Timer-A progress and Paula PORTS non-destructively before the handler
+     * is expected to acknowledge the chain. */
+    move.l #0x00040000,%d3
+timer_progress_wait:
+    move.b CIAA_TALO,%d0
+    cmpi.b #0x20,%d0
+    bne timer_progress_seen
+    subq.l #1,%d3
+    bne timer_progress_wait
+    lea timer_progress_fail,%a0
+    bsr serial_puts
+    bra chain_wait
+timer_progress_seen:
+    lea timer_progress_pass,%a0
+    bsr serial_puts
+
+chain_wait:
+    move.l #0x00040000,%d3
+ports_wait:
+    move.w INTREQR,%d0
+    andi.w #INTF_PORTS,%d0
+    bne ports_seen
+    tst.l IRQ_FLAG
+    bne irq_observed
+    subq.l #1,%d3
+    bne ports_wait
+    lea ports_pending_fail,%a0
+    bsr serial_puts
+    bra handler_wait
+ports_seen:
+    lea ports_pending_pass,%a0
+    bsr serial_puts
+
+handler_wait:
     move.l #0x00040000,%d3
 1:  tst.l IRQ_FLAG
     bne irq_observed
@@ -136,6 +172,9 @@ irq_observed:
 
 level2_handler:
     movem.l %d0-%d1/%a0,-(%sp)
+    /* CIA-A ICR read acknowledges the CIA source; Paula PORTS is then
+     * acknowledged separately below. */
+    move.b CIAA_ICR,%d1
     move.w INTREQR,%d0
     andi.w #INTF_PORTS,%d0
     beq 5f
@@ -181,6 +220,10 @@ paula_enable_pass: .asciz "IRQ.DIAG paula-intena master=PASS ports=PASS\r\n"
 paula_enable_fail: .asciz "IRQ.DIAG paula-intena master-or-ports=FAIL\r\n"
 handler_pass: .asciz "IRQ.DIAG cpu-stage handler-entered=PASS\r\n"
 handler_fail: .asciz "IRQ.DIAG cpu-stage handler-entered=FAIL\r\n"
+timer_progress_pass: .asciz "IRQ.DIAG chain timerA-progress=PASS\r\n"
+timer_progress_fail: .asciz "IRQ.DIAG chain timerA-progress=FAIL\r\n"
+ports_pending_pass: .asciz "IRQ.DIAG chain paula-PORTS-pending=PASS\r\n"
+ports_pending_fail: .asciz "IRQ.DIAG chain paula-PORTS-pending=FAIL\r\n"
 sr_unmask_pass: .asciz "IRQ.DIAG cpu-stage sr-ipl-after=1 status=PASS\r\n"
 paula_pass: .asciz "IRQ.PAULA status=PASS source=PORTS intena=enabled intreq=observed cleanup=PASS\r\n"
 paula_fail: .asciz "IRQ.PAULA status=FAIL source=PORTS reason=timeout cleanup=attempted\r\n"
