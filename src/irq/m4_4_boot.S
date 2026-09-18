@@ -92,6 +92,10 @@ vector_ok:
     move.w #0x2100,%sr
     nop
     move.w #INTREQ_TEST,INTREQ
+    /* Force an interruptible CPU wait point.  A tight polling loop can keep
+     * FS-UAE in a translated execution block; STOP makes the pending level-2
+     * request an explicit wake-up condition, matching real 68000 semantics. */
+    stop #0x2100
     move.w INTREQR,%d0
     andi.w #INTF_PORTS,%d0
     bne cpu_req_pending
