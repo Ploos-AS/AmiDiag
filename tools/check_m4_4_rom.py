@@ -3,19 +3,22 @@ import pathlib,sys
 
 MARK=[
  b'AMIDIAG proto=1 milestone=M4.4 cpu=68000\r\n',
- b'IRQ.DIAG paula=PORTS intreq=software-set status=PASS\r\n',
+ b'IRQ.DIAG paula-intena master=PASS ports=PASS\r\n',
  b'IRQ.PAULA status=PASS',
  b'IRQ.CPU status=PASS',
  b'TEST id=IRQ.CONTROLLER status=PASS paths=2 cleanup=2\r\n',
 ]
 
-# M4.4 isolates the Amiga interrupt-controller path:
-# Paula PORTS request -> Paula enable/request state -> 68000 level-2 autovector.
-# CIA-local Timer-A/ICR behavior is qualified separately by M4.3.
+# M4.4 exercises the real A500 interrupt-controller chain:
+# CIA-A Timer A -> CIA-A /IRQ -> Paula PORTS -> 68000 level-2 autovector.
 #
 # INTENAR is deliberately required: the ROM must snapshot Paula's original
 # interrupt-enable state so cleanup can restore it after the takeover test.
 REG=(
+ 0x00BFE401, # CIAA_TALO
+ 0x00BFE501, # CIAA_TAHI
+ 0x00BFED01, # CIAA_ICR
+ 0x00BFEE01, # CIAA_CRA
  0x00DFF01C, # INTENAR
  0x00DFF01E, # INTREQR
  0x00DFF09A, # INTENA
