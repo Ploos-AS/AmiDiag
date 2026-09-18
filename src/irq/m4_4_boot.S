@@ -85,6 +85,25 @@ vector_ok:
 
 2:  lea paula_route_pass,%a0
     bsr serial_puts
+    /* Verify that both Paula's master interrupt enable and PORTS enable
+     * survived the stage-1 request before attempting CPU delivery. */
+    move.w INTENAR,%d0
+    andi.w #0x4008,%d0
+    cmpi.w #0x4008,%d0
+    beq paula_enable_ok
+    bsr cleanup
+    lea paula_enable_fail,%a0
+    bsr serial_puts
+    lea paula_fail,%a0
+    bsr serial_puts
+    lea cpu_skip,%a0
+    bsr serial_puts
+    lea summary_fail,%a0
+    bsr serial_puts
+    bra halt
+paula_enable_ok:
+    lea paula_enable_pass,%a0
+    bsr serial_puts
     move.w #INTF_PORTS,INTREQ
     clr.l IRQ_FLAG
 
@@ -184,6 +203,8 @@ vector_pass: .asciz "IRQ.DIAG vector=0x68 writable=PASS handler-address=PASS\r\n
 vector_fail: .asciz "IRQ.DIAG vector=0x68 writable=FAIL reason=readback-mismatch\r\n"
 paula_route_pass: .asciz "IRQ.DIAG paula=PORTS intreq=software-set status=PASS\r\n"
 paula_route_fail: .asciz "IRQ.DIAG paula=PORTS intreq=software-set status=FAIL\r\n"
+paula_enable_pass: .asciz "IRQ.DIAG paula-intena master=PASS ports=PASS\r\n"
+paula_enable_fail: .asciz "IRQ.DIAG paula-intena master-or-ports=FAIL\r\n"
 cpu_req_pass: .asciz "IRQ.DIAG cpu-stage intreq=PORTS pending=PASS\r\n"
 cpu_req_fail: .asciz "IRQ.DIAG cpu-stage intreq=PORTS pending=FAIL\r\n"
 handler_pass: .asciz "IRQ.DIAG cpu-stage handler-entered=PASS\r\n"
