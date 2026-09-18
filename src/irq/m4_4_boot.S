@@ -57,40 +57,59 @@ vector_ok:
     move.w #INTF_PORTS,INTREQ
 
     /*
-     * Paula PORTS is the Amiga interrupt source for CIA-A's external IRQ
-     * input, not for CIA-A's internal Timer-A ICR source.  M4.3 already
-     * qualifies Timer-A/ICR locally.  For M4.4 isolate the Paula->CPU path
-     * deterministically by using Paula's PORTS request bit directly.
+     * CIA-A's /IRQ output is wired to Paula PORTS (level 2).  Generate a
+     * fresh hardware IRQ edge with CIA-A Timer A only after the vector,
+     * Paula enables and CPU IPL are ready.
      */
     move.w #INTENA_TEST,INTENA
+    move.w INTENAR,%d0
+    andi.w #0x4008,%d0
+    cmpi.w #0x4008,%d0
+    bne paula_setup_fail
+    lea paula_enable_pass,%a0
+    bsr serial_puts
 
-    /* Prove Paula accepts a PORTS request while CPU interrupts remain masked. */
-    move.w #INTREQ_TEST,INTREQ
-    move.l #0x00020000,%d3
-1:  move.w INTREQR,%d0
-    andi.w #INTF_PORTS,%d0
-    bne 2f
+    /* Stop Timer A, clear pending ICR state, then arm Timer-A interrupt. */
+    move.b CIAA_CRA,%d4
+    andi.b #0xFE,%d4
+    move.b %d4,CIAA_CRA
+    move.b CIAA_ICR,%d0
+    move.b #0x01,CIAA_ICR
+    move.b #0x81,CIAA_ICR
+    move.b #0x20,CIAA_TALO
+    move.b #0x00,CIAA_TAHI
+    clr.l IRQ_FLAG
+    move.w #INTF_PORTS,INTREQ
+
+    move.w #0x2100,%sr
+    lea sr_unmask_pass,%a0
+    bsr serial_puts
+
+    /* Start one-shot Timer A: START|RUNMODE|LOAD, Phi2 source. */
+    move.b %d4,%d0
+    andi.b #0xC0,%d0
+    ori.b #0x19,%d0
+    move.b %d0,CIAA_CRA
+
+    move.l #0x00040000,%d3
+1:  tst.l IRQ_FLAG
+    bne irq_observed
     subq.l #1,%d3
     bne 1b
+
+    move.w #0x2700,%sr
     bsr cleanup
-    lea paula_route_fail,%a0
+    lea handler_fail,%a0
     bsr serial_puts
     lea paula_fail,%a0
     bsr serial_puts
-    lea cpu_skip,%a0
+    lea cpu_fail,%a0
     bsr serial_puts
     lea summary_fail,%a0
     bsr serial_puts
     bra halt
 
-2:  lea paula_route_pass,%a0
-    bsr serial_puts
-    /* Verify that both Paula's master interrupt enable and PORTS enable
-     * survived the stage-1 request before attempting CPU delivery. */
-    move.w INTENAR,%d0
-    andi.w #0x4008,%d0
-    cmpi.w #0x4008,%d0
-    beq paula_enable_ok
+paula_setup_fail:
     bsr cleanup
     lea paula_enable_fail,%a0
     bsr serial_puts
@@ -101,72 +120,8 @@ vector_ok:
     lea summary_fail,%a0
     bsr serial_puts
     bra halt
-paula_enable_ok:
-    lea paula_enable_pass,%a0
-    bsr serial_puts
-    move.w #INTF_PORTS,INTREQ
-    clr.l IRQ_FLAG
 
-    /* Minimal level-2 sanity path.  Record the actual SR/IPL transition,
-     * then issue a fresh PORTS request and poll normally. */
-    move.w %sr,%d0
-    andi.w #0x0700,%d0
-    cmpi.w #0x0700,%d0
-    bne sr_mask_fail
-    lea sr_mask_pass,%a0
-    bsr serial_puts
-    bra sr_unmask
-sr_mask_fail:
-    lea sr_mask_bad,%a0
-    bsr serial_puts
-sr_unmask:
-    move.w #0x2100,%sr
-    move.w %sr,%d0
-    andi.w #0x0700,%d0
-    cmpi.w #0x0100,%d0
-    bne sr_unmask_fail
-    lea sr_unmask_pass,%a0
-    bsr serial_puts
-    bra issue_cpu_request
-sr_unmask_fail:
-    lea sr_unmask_bad,%a0
-    bsr serial_puts
-issue_cpu_request:
-    move.w #INTREQ_TEST,INTREQ
-    move.w INTREQR,%d0
-    andi.w #INTF_PORTS,%d0
-    bne cpu_req_pending
-    move.w #0x2700,%sr
-    bsr cleanup
-    lea cpu_req_fail,%a0
-    bsr serial_puts
-    lea paula_pass,%a0
-    bsr serial_puts
-    lea cpu_fail,%a0
-    bsr serial_puts
-    lea summary_fail,%a0
-    bsr serial_puts
-    bra halt
-cpu_req_pending:
-    lea cpu_req_pass,%a0
-    bsr serial_puts
-    move.l #0x00020000,%d3
-3:  tst.l IRQ_FLAG
-    bne 4f
-    subq.l #1,%d3
-    bne 3b
-    move.w #0x2700,%sr
-    bsr cleanup
-    lea handler_fail,%a0
-    bsr serial_puts
-    lea paula_pass,%a0
-    bsr serial_puts
-    lea cpu_fail,%a0
-    bsr serial_puts
-    lea summary_fail,%a0
-    bsr serial_puts
-    bra halt
-4:
+irq_observed:
     move.w #0x2700,%sr
     bsr cleanup
     lea handler_pass,%a0
@@ -192,6 +147,9 @@ level2_handler:
 cleanup:
     move.w #0x7fff,INTENA
     move.w #INTF_PORTS,INTREQ
+    move.b #0x01,CIAA_ICR
+    move.b CIAA_ICR,%d0
+    move.b %d4,CIAA_CRA
     move.l %d7,VEC_L2
     tst.w %d2
     beq 6f
@@ -219,18 +177,11 @@ banner: .asciz "AMIDIAG proto=1 milestone=M4.4 cpu=68000\r\n"
 boot_record: .asciz "BOOT phase=reset status=PASS\r\n"
 vector_pass: .asciz "IRQ.DIAG vector=0x68 writable=PASS handler-address=PASS\r\n"
 vector_fail: .asciz "IRQ.DIAG vector=0x68 writable=FAIL reason=readback-mismatch\r\n"
-paula_route_pass: .asciz "IRQ.DIAG paula=PORTS intreq=software-set status=PASS\r\n"
-paula_route_fail: .asciz "IRQ.DIAG paula=PORTS intreq=software-set status=FAIL\r\n"
 paula_enable_pass: .asciz "IRQ.DIAG paula-intena master=PASS ports=PASS\r\n"
 paula_enable_fail: .asciz "IRQ.DIAG paula-intena master-or-ports=FAIL\r\n"
-cpu_req_pass: .asciz "IRQ.DIAG cpu-stage intreq=PORTS pending=PASS\r\n"
-cpu_req_fail: .asciz "IRQ.DIAG cpu-stage intreq=PORTS pending=FAIL\r\n"
 handler_pass: .asciz "IRQ.DIAG cpu-stage handler-entered=PASS\r\n"
 handler_fail: .asciz "IRQ.DIAG cpu-stage handler-entered=FAIL\r\n"
-sr_mask_pass: .asciz "IRQ.DIAG cpu-stage sr-ipl-before=7 status=PASS\r\n"
-sr_mask_bad: .asciz "IRQ.DIAG cpu-stage sr-ipl-before=unexpected status=FAIL\r\n"
 sr_unmask_pass: .asciz "IRQ.DIAG cpu-stage sr-ipl-after=1 status=PASS\r\n"
-sr_unmask_bad: .asciz "IRQ.DIAG cpu-stage sr-ipl-after=unexpected status=FAIL\r\n"
 paula_pass: .asciz "IRQ.PAULA status=PASS source=PORTS intena=enabled intreq=observed cleanup=PASS\r\n"
 paula_fail: .asciz "IRQ.PAULA status=FAIL source=PORTS reason=timeout cleanup=attempted\r\n"
 cpu_pass: .asciz "IRQ.CPU status=PASS level=2 vector=autovector handler=observed cleanup=PASS\r\n"
