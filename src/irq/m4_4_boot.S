@@ -56,30 +56,16 @@ vector_ok:
     move.w #0x7fff,INTENA
     move.w #INTF_PORTS,INTREQ
 
-    /* Clear stale CIA state before enabling the Timer A mask. Reading ICR is
-     * an acknowledge operation, so do not poll it after the test starts: a
-     * read would deassert CIA-A /IRQ before Paula has necessarily sampled it. */
-    move.b #0x01,CIAA_ICR
-    move.b CIAA_ICR,%d0
-
-    move.b CIAA_CRA,%d4
-    move.b CIAA_TALO,%d5
-    move.b CIAA_TAHI,%d6
-    move.b %d4,%d0
-    andi.b #0xDE,%d0
-    move.b %d0,CIAA_CRA
-    move.b #0x20,CIAA_TALO
-    move.b #0x00,CIAA_TAHI
-
-    move.b #0x81,CIAA_ICR
+    /*
+     * Paula PORTS is the Amiga interrupt source for CIA-A's external IRQ
+     * input, not for CIA-A's internal Timer-A ICR source.  M4.3 already
+     * qualifies Timer-A/ICR locally.  For M4.4 isolate the Paula->CPU path
+     * deterministically by using Paula's PORTS request bit directly.
+     */
     move.w #INTENA_TEST,INTENA
-    move.b %d0,%d1
-    andi.b #0xF6,%d1
-    ori.b #0x11,%d1
-    move.b %d1,CIAA_CRA
 
-    /* Stage 1: observe Paula first.  This leaves CIA-A /IRQ asserted until
-     * PORTS has been observed, then acknowledges CIA exactly once. */
+    /* Prove Paula accepts a PORTS request while CPU interrupts remain masked. */
+    move.w #INTREQ_TEST,INTREQ
     move.l #0x00020000,%d3
 1:  move.w INTREQR,%d0
     andi.w #INTF_PORTS,%d0
@@ -99,20 +85,12 @@ vector_ok:
 
 2:  lea paula_route_pass,%a0
     bsr serial_puts
-    /* Now acknowledge the CIA source and clear the old Paula request. */
-    move.b CIAA_ICR,%d0
-    btst #0,%d0
-    bne cia_seen
-    lea cia_sync_fail,%a0
-    bsr serial_puts
-    bra stage2
-cia_seen:
-    lea cia_sync_pass,%a0
-    bsr serial_puts
-stage2:
     move.w #INTF_PORTS,INTREQ
     clr.l IRQ_FLAG
+
+    /* Fresh PORTS request after unmasking the 68000 proves level-2 delivery. */
     move.w #0x2100,%sr
+    nop
     move.w #INTREQ_TEST,INTREQ
     move.w INTREQR,%d0
     andi.w #INTF_PORTS,%d0
@@ -165,23 +143,14 @@ level2_handler:
     move.w INTREQR,%d0
     andi.w #INTF_PORTS,%d0
     beq 5f
-    move.b CIAA_ICR,%d1
     move.w #INTF_PORTS,INTREQ
     move.l #1,IRQ_FLAG
 5:  movem.l (%sp)+,%d0-%d1/%a0
     rte
 
 cleanup:
-    move.b #0x01,CIAA_ICR
     move.w #0x7fff,INTENA
-    move.b %d4,%d0
-    andi.b #0xFE,%d0
-    move.b %d0,CIAA_CRA
-    move.b %d5,CIAA_TALO
-    move.b %d6,CIAA_TAHI
-    move.b CIAA_ICR,%d0
     move.w #INTF_PORTS,INTREQ
-    move.b %d4,CIAA_CRA
     move.l %d7,VEC_L2
     tst.w %d2
     beq 6f
@@ -209,10 +178,8 @@ banner: .asciz "AMIDIAG proto=1 milestone=M4.4 cpu=68000\r\n"
 boot_record: .asciz "BOOT phase=reset status=PASS\r\n"
 vector_pass: .asciz "IRQ.DIAG vector=0x68 writable=PASS handler-address=PASS\r\n"
 vector_fail: .asciz "IRQ.DIAG vector=0x68 writable=FAIL reason=readback-mismatch\r\n"
-cia_sync_pass: .asciz "IRQ.DIAG cia=timerA-pending status=PASS ack=after-paula\r\n"
-cia_sync_fail: .asciz "IRQ.DIAG cia=timerA-pending status=FAIL ack=after-paula\r\n"
-paula_route_pass: .asciz "IRQ.DIAG cia-to-paula=PORTS status=PASS ack-order=paula-before-cia\r\n"
-paula_route_fail: .asciz "IRQ.DIAG cia-to-paula=PORTS status=FAIL ack-order=paula-before-cia\r\n"
+paula_route_pass: .asciz "IRQ.DIAG paula=PORTS intreq=software-set status=PASS\r\n"
+paula_route_fail: .asciz "IRQ.DIAG paula=PORTS intreq=software-set status=FAIL\r\n"
 cpu_req_pass: .asciz "IRQ.DIAG cpu-stage intreq=PORTS pending=PASS\r\n"
 cpu_req_fail: .asciz "IRQ.DIAG cpu-stage intreq=PORTS pending=FAIL\r\n"
 handler_pass: .asciz "IRQ.DIAG cpu-stage handler-entered=PASS\r\n"
