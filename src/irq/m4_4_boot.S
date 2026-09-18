@@ -107,14 +107,32 @@ paula_enable_ok:
     move.w #INTF_PORTS,INTREQ
     clr.l IRQ_FLAG
 
-    /* Fresh PORTS request after unmasking the 68000 proves level-2 delivery. */
+    /* Minimal level-2 sanity path.  Record the actual SR/IPL transition,
+     * then issue a fresh PORTS request and poll normally. */
+    move.w %sr,%d0
+    andi.w #0x0700,%d0
+    cmpi.w #0x0700,%d0
+    bne sr_mask_fail
+    lea sr_mask_pass,%a0
+    bsr serial_puts
+    bra sr_unmask
+sr_mask_fail:
+    lea sr_mask_bad,%a0
+    bsr serial_puts
+sr_unmask:
     move.w #0x2100,%sr
-    nop
+    move.w %sr,%d0
+    andi.w #0x0700,%d0
+    cmpi.w #0x0100,%d0
+    bne sr_unmask_fail
+    lea sr_unmask_pass,%a0
+    bsr serial_puts
+    bra issue_cpu_request
+sr_unmask_fail:
+    lea sr_unmask_bad,%a0
+    bsr serial_puts
+issue_cpu_request:
     move.w #INTREQ_TEST,INTREQ
-    /* Force an interruptible CPU wait point.  A tight polling loop can keep
-     * FS-UAE in a translated execution block; STOP makes the pending level-2
-     * request an explicit wake-up condition, matching real 68000 semantics. */
-    stop #0x2100
     move.w INTREQR,%d0
     andi.w #INTF_PORTS,%d0
     bne cpu_req_pending
@@ -209,6 +227,10 @@ cpu_req_pass: .asciz "IRQ.DIAG cpu-stage intreq=PORTS pending=PASS\r\n"
 cpu_req_fail: .asciz "IRQ.DIAG cpu-stage intreq=PORTS pending=FAIL\r\n"
 handler_pass: .asciz "IRQ.DIAG cpu-stage handler-entered=PASS\r\n"
 handler_fail: .asciz "IRQ.DIAG cpu-stage handler-entered=FAIL\r\n"
+sr_mask_pass: .asciz "IRQ.DIAG cpu-stage sr-ipl-before=7 status=PASS\r\n"
+sr_mask_bad: .asciz "IRQ.DIAG cpu-stage sr-ipl-before=unexpected status=FAIL\r\n"
+sr_unmask_pass: .asciz "IRQ.DIAG cpu-stage sr-ipl-after=1 status=PASS\r\n"
+sr_unmask_bad: .asciz "IRQ.DIAG cpu-stage sr-ipl-after=unexpected status=FAIL\r\n"
 paula_pass: .asciz "IRQ.PAULA status=PASS source=PORTS intena=enabled intreq=observed cleanup=PASS\r\n"
 paula_fail: .asciz "IRQ.PAULA status=FAIL source=PORTS reason=timeout cleanup=attempted\r\n"
 cpu_pass: .asciz "IRQ.CPU status=PASS level=2 vector=autovector handler=observed cleanup=PASS\r\n"
