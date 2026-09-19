@@ -74,7 +74,10 @@ vector_ok:
     andi.b #0xFE,%d4
     move.b %d4,CIAA_CRA
     move.b CIAA_ICR,%d0
-    move.b #0x01,CIAA_ICR
+    /* Clear all CIA-A ICR masks first, acknowledge stale pending state,
+     * then enable only Timer A.  CIA ICR bit 7 is SET/CLR control on write. */
+    move.b #0x7F,CIAA_ICR
+    move.b CIAA_ICR,%d0
     move.b #0x81,CIAA_ICR
     /* ICR mask is write-only.  Validate the actual IRQ output path by
      * waiting for PORTS after a fresh timer expiry, not by reading ICR. */
