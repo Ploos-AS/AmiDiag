@@ -1,0 +1,58 @@
+name: M4.4 Amiberry qualification
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['src/irq/m4_4_boot.S','tools/check_m4_4_rom.py','.github/workflows/m4_4-amiberry.yml']
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build/runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu xvfb python3 curl unzip
+      - name: Build ROM
+        run: |
+          mkdir -p build
+          m68k-linux-gnu-gcc -m68000 -msoft-float -ffreestanding -fno-builtin -nostdlib -c src/irq/m4_4_boot.S -o build/m4_4_boot.o
+          m68k-linux-gnu-gcc -m68000 -nostdlib -Wl,-T,linker.ld -Wl,-Map,build/amidiag-m4_4.map build/m4_4_boot.o -o build/amidiag-m4_4.elf
+          m68k-linux-gnu-objcopy -O binary build/amidiag-m4_4.elf build/amidiag-m4_4.rom
+          truncate -s 524288 build/amidiag-m4_4.rom
+          python3 tools/check_m4_4_rom.py build/amidiag-m4_4.rom
+      - name: Acquire amiga-runtime Amiberry
+        run: |
+          git clone --depth=1 https://github.com/Ploos-AS/amiga-runtime.git build/amiga-runtime
+          docker build -t amiga-runtime:m4_4 build/amiga-runtime
+          mkdir -p "$PWD/build/amiberry"
+          docker run --rm -v "$PWD/build/amiberry:/opt/amiga-runtime/amiberry" amiga-runtime:m4_4 prepare-amiberry
+          cat build/amiberry/manifest.txt
+      - name: Qualify M4.4 with Amiberry
+        run: |
+          exe=$(cat build/amiberry/executable.txt)
+          case "$exe" in /*) exe="$PWD/build/amiberry/$(basename "$exe")";; *) exe="$PWD/build/amiberry/$exe";; esac
+          test -x "$exe"
+          cat > build/m4_4.uae <<EOF
+          cpu_type=68000
+          cpu_compatible=true
+          cpu_speed=real
+          chipset=ocs
+          chipmem_size=1
+          kickstart_rom_file=$PWD/build/amidiag-m4_4.rom
+          use_gui=no
+          serial_port=tcp://127.0.0.1:1257/wait
+          EOF
+          xvfb-run -a "$exe" -f build/m4_4.uae >build/amiberry.stdout.log 2>build/amiberry.stderr.log &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          python3 tools/capture_serial_tcp.py --port 1257 --output build/m4_4-amiberry-serial.txt --connect-timeout 30 --read-timeout 15 --expect 'AMIDIAG proto=1 milestone=M4.4 cpu=68000' --expect 'TEST id=IRQ.CONTROLLER status=PASS paths=2 cleanup=2'
+          python3 tools/check_m4_4_serial.py build/m4_4-amiberry-serial.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: amidiag-m4_4-amiberry-a500-68000
+          path: build/
