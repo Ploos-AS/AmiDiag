@@ -78,8 +78,8 @@ vector_ok:
     move.b #0x81,CIAA_ICR
     /* ICR mask is write-only.  Validate the actual IRQ output path by
      * waiting for PORTS after a fresh timer expiry, not by reading ICR. */
-    move.b #0x20,CIAA_TALO
-    move.b #0x00,CIAA_TAHI
+    move.b #0x00,CIAA_TALO
+    move.b #0x20,CIAA_TAHI
     clr.l IRQ_FLAG
     move.w #INTF_PORTS,INTREQ
 
@@ -92,12 +92,9 @@ vector_ok:
     andi.b #0xC0,%d0
     ori.b #0x19,%d0
     move.b %d0,CIAA_CRA
-    /* Give the 8520 a short synchronization window after ICR mask/start
-     * programming before diagnosing the downstream Paula line. */
-    move.l #0x00000100,%d5
-cia_sync:
-    subq.l #1,%d5
-    bne cia_sync
+    /* Timer A is deliberately long enough that we can observe it counting
+     * before expiry.  A previous 0x0020 latch expired before the first probe,
+     * making timer-progress diagnostics misleading. */
 
     /* Observe each hardware link while CPU IRQs are still eligible.  Reading
      * ICR clears CIA pending state, so do not read it here; instead observe
@@ -106,7 +103,7 @@ cia_sync:
     move.l #0x00040000,%d3
 timer_progress_wait:
     move.b CIAA_TALO,%d0
-    cmpi.b #0x20,%d0
+    cmpi.b #0x00,%d0
     bne timer_progress_seen
     subq.l #1,%d3
     bne timer_progress_wait
