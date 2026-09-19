@@ -49,6 +49,14 @@ jobs:
           xvfb-run -a "$exe" -f build/m4_4.uae >build/amiberry.stdout.log 2>build/amiberry.stderr.log &
           pid=$!
           trap 'kill "$pid" 2>/dev/null || true' EXIT
+          sleep 3
+          if ! kill -0 "$pid" 2>/dev/null; then
+            echo '--- Amiberry stdout ---'
+            cat build/amiberry.stdout.log || true
+            echo '--- Amiberry stderr ---'
+            cat build/amiberry.stderr.log || true
+            exit 1
+          fi
           python3 tools/capture_serial_tcp.py --port 1257 --output build/m4_4-amiberry-serial.txt --connect-timeout 30 --read-timeout 15 --expect 'AMIDIAG proto=1 milestone=M4.4 cpu=68000' --expect 'TEST id=IRQ.CONTROLLER status=PASS paths=2 cleanup=2'
           python3 tools/check_m4_4_serial.py build/m4_4-amiberry-serial.txt
       - uses: actions/upload-artifact@v4
