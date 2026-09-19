@@ -15,7 +15,7 @@ jobs:
       - name: Install build/runtime dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu xvfb python3 curl unzip
+          sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu xvfb python3 curl unzip libserialport0
       - name: Build ROM
         run: |
           mkdir -p build
