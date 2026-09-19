@@ -129,6 +129,20 @@ ports_wait:
     bne ports_wait
     lea ports_pending_fail,%a0
     bsr serial_puts
+    /* Diagnose CIA locally only after PORTS failed. Reading ICR acknowledges
+     * the CIA source, so this is intentionally a failure-path probe. Bit 0
+     * proves Timer A pending; bit 7 proves an enabled source asserted IRQ. */
+    move.b CIAA_ICR,%d0
+    move.b %d0,%d1
+    andi.b #0x81,%d1
+    cmpi.b #0x81,%d1
+    bne cia_icr_not_asserted
+    lea cia_icr_pending_pass,%a0
+    bsr serial_puts
+    bra handler_wait
+cia_icr_not_asserted:
+    lea cia_icr_pending_fail,%a0
+    bsr serial_puts
     bra handler_wait
 ports_seen:
     lea ports_pending_pass,%a0
@@ -232,6 +246,8 @@ timer_progress_pass: .asciz "IRQ.DIAG chain timerA-progress=PASS\r\n"
 timer_progress_fail: .asciz "IRQ.DIAG chain timerA-progress=FAIL\r\n"
 ports_pending_pass: .asciz "IRQ.DIAG chain paula-PORTS-pending=PASS\r\n"
 ports_pending_fail: .asciz "IRQ.DIAG chain paula-PORTS-pending=FAIL\r\n"
+cia_icr_pending_pass: .asciz "IRQ.DIAG chain ciaA-ICR-timerA-pending=PASS\r\n"
+cia_icr_pending_fail: .asciz "IRQ.DIAG chain ciaA-ICR-timerA-pending=FAIL\r\n"
 cia_route_note: .asciz "IRQ.DIAG chain ciaA-irq-route=PORTS source=TIMERA\r\n"
 sr_unmask_pass: .asciz "IRQ.DIAG cpu-stage sr-ipl-after=1 status=PASS\r\n"
 paula_pass: .asciz "IRQ.PAULA status=PASS source=PORTS intena=enabled intreq=observed cleanup=PASS\r\n"
