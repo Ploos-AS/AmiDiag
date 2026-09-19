@@ -15,7 +15,7 @@ jobs:
       - name: Install build/runtime dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu xvfb python3 curl unzip libserialport0 libportmidi0 libmpeg2-4 libenet7 libpcap0.8
+          sudo apt-get install -y gcc-m68k-linux-gnu binutils-m68k-linux-gnu xvfb python3 curl unzip
       - name: Build ROM
         run: |
           mkdir -p build
@@ -46,6 +46,7 @@ jobs:
           use_gui=no
           serial_port=tcp://127.0.0.1:1257/wait
           EOF
+          export LD_LIBRARY_PATH="$PWD/build/amiberry/deb-root/usr/lib/x86_64-linux-gnu:$PWD/build/amiberry/deb-root/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           xvfb-run -a "$exe" -f build/m4_4.uae >build/amiberry.stdout.log 2>build/amiberry.stderr.log &
           pid=$!
           trap 'kill "$pid" 2>/dev/null || true' EXIT
