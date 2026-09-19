@@ -46,3 +46,16 @@ Real-hardware and additional model qualification remain separate evidence layers
 ## Clean-room boundary
 
 Use public Motorola 68000, MOS/CSG 8520 and Amiga hardware documentation plus independently observed emulator/hardware behavior. Do not inspect Kickstart, DiagROMV2, or proprietary diagnostic-ROM source.
+
+
+## FS-UAE qualification investigation
+
+The A500/68000 FS-UAE qualification currently exposes an emulator-specific boundary in the CIA-A to Paula interrupt route. The ROM independently demonstrates CIA-A Timer A operation and an enabled Timer-A ICR source, but FS-UAE does not expose the resulting CIA-A IRQ as Paula PORTS in this custom-ROM qualification path.
+
+This is not treated as evidence of an AmiDiag hardware-path failure. M4.4 remains ACTIVE and must not be frozen PASS until the full chain is observed in a qualifying runtime. Further CIA register changes should be evidence-driven rather than attempts to work around the emulator.
+
+The diagnostic chain is intentionally retained:
+
+`CIA-A Timer A -> CIA-A /IRQ -> Paula PORTS -> 68000 level-2 autovector`
+
+A future qualification may use another supported runtime or real hardware while retaining FS-UAE as a regression target.
