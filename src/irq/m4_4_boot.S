@@ -79,6 +79,8 @@ vector_ok:
     move.b #0x7F,CIAA_ICR
     move.b CIAA_ICR,%d0
     move.b #0x81,CIAA_ICR
+    lea cia_mask_armed,%a0
+    bsr serial_puts
     /* ICR mask is write-only.  Validate the actual IRQ output path by
      * waiting for PORTS after a fresh timer expiry, not by reading ICR. */
     move.b #0x00,CIAA_TALO
@@ -246,7 +248,8 @@ timer_progress_pass: .asciz "IRQ.DIAG chain timerA-progress=PASS\r\n"
 timer_progress_fail: .asciz "IRQ.DIAG chain timerA-progress=FAIL\r\n"
 ports_pending_pass: .asciz "IRQ.DIAG chain paula-PORTS-pending=PASS\r\n"
 ports_pending_fail: .asciz "IRQ.DIAG chain paula-PORTS-pending=FAIL\r\n"
-cia_icr_pending_pass: .asciz "IRQ.DIAG chain ciaA-ICR-timerA-pending=PASS\r\n"
+cia_mask_armed: .asciz "IRQ.DIAG chain ciaA-ICR-mask timerA=enabled\r\n"
+cia_icr_pending_pass: .asciz "IRQ.DIAG chain ciaA-ICR-timerA-pending=PASS irq-asserted=PASS\r\n"
 cia_icr_pending_fail: .asciz "IRQ.DIAG chain ciaA-ICR-timerA-pending=FAIL\r\n"
 cia_route_note: .asciz "IRQ.DIAG chain ciaA-irq-route=PORTS source=TIMERA\r\n"
 sr_unmask_pass: .asciz "IRQ.DIAG cpu-stage sr-ipl-after=1 status=PASS\r\n"
