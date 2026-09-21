@@ -47,7 +47,7 @@ jobs:
           serial_port=tcp://127.0.0.1:1257/wait
           EOF
           AMIBERRY_LIB_DIRS=$(find "$PWD/build/amiberry/deb-root" "$PWD/build/amiberry/root" -type f \( -name "*.so" -o -name "*.so.*" \) -printf "%h\\n" 2>/dev/null | sort -u | paste -sd: -)
-          export LD_LIBRARY_PATH="$AMIBERRY_LIB_DIRS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export LD_LIBRARY_PATH="$AMIBERRY_LIB_DIRS:/usr/lib/x86_64-linux-gnu:/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           echo "Amiberry library path: $LD_LIBRARY_PATH"
           ldd "$exe" || true
           xvfb-run -a "$exe" -f build/m4_4.uae >build/amiberry.stdout.log 2>build/amiberry.stderr.log &
